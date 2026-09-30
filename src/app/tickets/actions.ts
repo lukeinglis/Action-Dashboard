@@ -1,0 +1,163 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import type { BetLeg, BetLegEvent, BetLegSubject, Ticket, TicketStatus, LegSettlement, LiveLegState, MatchMethod, RootingDirection } from "@/lib/types/domain";
+import {
+  createTicket as createTicketLib,
+  deleteTicket as deleteTicketLib,
+  reorderTicket as reorderTicketLib,
+  setManualTicketStatus as setManualTicketStatusLib,
+  updateTicket as updateTicketLib,
+  type CreateTicketInput,
+  type UpdateTicketInput,
+} from "@/lib/tickets/tickets";
+import {
+  createBetLeg as createBetLegLib,
+  deleteBetLeg as deleteBetLegLib,
+  setManualLegLiveState as setManualLegLiveStateLib,
+  setManualLegStatus as setManualLegStatusLib,
+  updateBetLeg as updateBetLegLib,
+  type CreateBetLegInput,
+  type UpdateBetLegInput,
+} from "@/lib/tickets/bet-legs";
+import {
+  linkBetLegEvent as linkBetLegEventLib,
+  unlinkBetLegEvent as unlinkBetLegEventLib,
+} from "@/lib/tickets/bet-leg-events";
+import {
+  removeBetLegSubject as removeBetLegSubjectLib,
+  setBetLegSubject as setBetLegSubjectLib,
+  setManualSubjectDirection as setManualSubjectDirectionLib,
+  type SetBetLegSubjectInput,
+} from "@/lib/tickets/bet-leg-subjects";
+
+async function requireUserId(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+  return user.id;
+}
+
+export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
+  const ticket = await createTicketLib(supabase, userId, input);
+  revalidatePath("/tickets");
+  return ticket;
+}
+
+export async function updateTicket(ticketId: string, input: UpdateTicketInput): Promise<void> {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+  await updateTicketLib(supabase, ticketId, input);
+  revalidatePath("/tickets");
+}
+
+export async function setManualTicketStatus(ticketId: string, status: TicketStatus | null): Promise<void> {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+  await setManualTicketStatusLib(supabase, ticketId, status);
+  revalidatePath("/tickets");
+}
+
+export async function reorderTicket(
+  ticketId: string,
+  beforeSortKey: string | null,
+  afterSortKey: string | null,
+): Promise<string> {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+  const sortKey = await reorderTicketLib(supabase, ticketId, beforeSortKey, afterSortKey);
+  revalidatePath("/tickets");
+  return sortKey;
+}
+
+export async function deleteTicket(ticketId: string): Promise<void> {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+  await deleteTicketLib(supabase, ticketId);
+  revalidatePath("/tickets");
+}
+
+export async function createBetLeg(input: CreateBetLegInput): Promise<BetLeg> {
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
+  const leg = await createBetLegLib(supabase, userId, input);
+  revalidatePath("/tickets");
+  return leg;
+}
+
+export async function updateBetLeg(betLegId: string, input: UpdateBetLegInput): Promise<void> {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+  await updateBetLegLib(supabase, betLegId, input);
+  revalidatePath("/tickets");
+}
+
+export async function setManualLegStatus(betLegId: string, status: LegSettlement | null): Promise<void> {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+  await setManualLegStatusLib(supabase, betLegId, status);
+  revalidatePath("/tickets");
+}
+
+export async function setManualLegLiveState(
+  betLegId: string,
+  liveState: LiveLegState | null,
+  liveDetail?: string | null,
+): Promise<void> {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+  await setManualLegLiveStateLib(supabase, betLegId, liveState, liveDetail);
+  revalidatePath("/tickets");
+}
+
+export async function deleteBetLeg(betLegId: string): Promise<void> {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+  await deleteBetLegLib(supabase, betLegId);
+  revalidatePath("/tickets");
+}
+
+export async function linkBetLegEvent(
+  betLegId: string,
+  eventId: string,
+  matchMethod: MatchMethod,
+): Promise<BetLegEvent | null> {
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
+  const link = await linkBetLegEventLib(supabase, userId, betLegId, eventId, matchMethod);
+  revalidatePath("/tickets");
+  return link;
+}
+
+export async function unlinkBetLegEvent(betLegEventId: string): Promise<void> {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+  await unlinkBetLegEventLib(supabase, betLegEventId);
+  revalidatePath("/tickets");
+}
+
+export async function setBetLegSubject(input: SetBetLegSubjectInput): Promise<BetLegSubject> {
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
+  const subject = await setBetLegSubjectLib(supabase, userId, input);
+  revalidatePath("/tickets");
+  return subject;
+}
+
+export async function setManualSubjectDirection(subjectId: string, direction: RootingDirection): Promise<void> {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+  await setManualSubjectDirectionLib(supabase, subjectId, direction);
+  revalidatePath("/tickets");
+}
+
+export async function removeBetLegSubject(subjectId: string): Promise<void> {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+  await removeBetLegSubjectLib(supabase, subjectId);
+  revalidatePath("/tickets");
+}

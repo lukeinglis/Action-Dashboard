@@ -8,6 +8,7 @@ import { createEventInputSchema, type CreateEventInput } from "@/lib/events/sche
 import { toEvent, type EventRow } from "@/lib/db/rows";
 import type { Event } from "@/lib/types/domain";
 import { mergeEventInto } from "@/lib/events/merge";
+import { deleteEvent as deleteEventLib, unlinkAllEventLinks } from "@/lib/events/delete";
 import {
   clearAllOverrides,
   returnFieldToAutomatic,
@@ -110,5 +111,21 @@ export async function clearAllEventOverrides(eventId: string): Promise<void> {
   const supabase = await createClient();
   await requireUserId(supabase);
   await clearAllOverrides(supabase, eventId);
+  revalidatePath("/events");
+}
+
+/** Hard-deletes an Event. Throws EventLinkedError if a BetLeg still links to it. */
+export async function deleteEvent(eventId: string): Promise<void> {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+  await deleteEventLib(supabase, eventId);
+  revalidatePath("/events");
+}
+
+/** Removes every BetLeg link to this Event, clearing the way to delete it. */
+export async function unlinkAllEventBetLegs(eventId: string): Promise<void> {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+  await unlinkAllEventLinks(supabase, eventId);
   revalidatePath("/events");
 }

@@ -20,6 +20,12 @@ export default async function EventsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-neutral-100">Events</h1>
         <div className="flex gap-3">
+          <Link href="/tickets" className="text-sm text-neutral-300 underline">
+            Tickets
+          </Link>
+          <Link href="/inbox" className="text-sm text-neutral-300 underline">
+            Inbox
+          </Link>
           <Link href="/events/new" className="text-sm text-neutral-300 underline">
             New Event
           </Link>

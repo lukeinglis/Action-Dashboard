@@ -28,6 +28,7 @@ export function createFakeSupabase(initialTables: Tables) {
     if (!tables[table]) tables[table] = [];
     const filters: Array<(row: Row) => boolean> = [];
     let mode: "select" | "insert" | "update" | "delete" = "select";
+    let mutated = false;
     let payload: Row | Row[] | null = null;
     let selectCols: string | undefined;
 
@@ -70,22 +71,25 @@ export function createFakeSupabase(initialTables: Tables) {
 
     const query: Query = {
       select(cols) {
-        mode = "select";
+        if (!mutated) mode = "select";
         selectCols = cols;
         return query;
       },
       insert(p) {
         mode = "insert";
+        mutated = true;
         payload = p;
         return query;
       },
       update(p) {
         mode = "update";
+        mutated = true;
         payload = p;
         return query;
       },
       delete() {
         mode = "delete";
+        mutated = true;
         return query;
       },
       eq(col, val) {
