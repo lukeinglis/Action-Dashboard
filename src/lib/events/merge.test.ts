@@ -74,4 +74,37 @@ describe("mergeEventInto", () => {
     const ids = supabase.tables.events.map((e) => e.id);
     expect(ids).toEqual(["target"]);
   });
+
+  it("moves a bet_leg_events link to the target when the target has none for that leg", async () => {
+    const supabase = createFakeSupabase({
+      events: [
+        { id: "source", is_pinned: false },
+        { id: "target", is_pinned: false },
+      ],
+      provider_mappings: [],
+      bet_leg_events: [{ id: "ble1", bet_leg_id: "leg1", event_id: "source" }],
+    });
+
+    await mergeEventInto(supabase as never, "source", "target");
+
+    expect(supabase.tables.bet_leg_events[0].event_id).toBe("target");
+  });
+
+  it("drops a duplicate bet_leg_events link when the target already has one for the same leg", async () => {
+    const supabase = createFakeSupabase({
+      events: [
+        { id: "source", is_pinned: false },
+        { id: "target", is_pinned: false },
+      ],
+      provider_mappings: [],
+      bet_leg_events: [
+        { id: "ble-source", bet_leg_id: "leg1", event_id: "source" },
+        { id: "ble-target", bet_leg_id: "leg1", event_id: "target" },
+      ],
+    });
+
+    await mergeEventInto(supabase as never, "source", "target");
+
+    expect(supabase.tables.bet_leg_events.map((l) => l.id)).toEqual(["ble-target"]);
+  });
 });

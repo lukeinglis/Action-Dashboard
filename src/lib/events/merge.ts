@@ -3,8 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 /**
  * Merges `sourceEventId` into `targetEventId`: moves every link to the
  * surviving Event, then deletes the duplicate (docs/PRD.md sections 20.2,
- * 63.1). In Phase 1 the only link table is provider_mappings; later phases
- * (BetLegEvent, FantasyRosterSlot, DFSLineupSlot) add more tables here.
+ * 63.1). Phase 1 added provider_mappings; Phase 2 adds bet_leg_events.
+ * Later phases (FantasyRosterSlot, DFSLineupSlot) add more tables here.
  */
 export async function mergeEventInto(
   supabase: SupabaseClient,
@@ -13,6 +13,33 @@ export async function mergeEventInto(
 ): Promise<void> {
   if (sourceEventId === targetEventId) {
     throw new Error("Cannot merge an Event into itself");
+  }
+
+  const { data: betLegEvents, error: betLegEventsError } = await supabase
+    .from("bet_leg_events")
+    .select("*")
+    .eq("event_id", sourceEventId);
+  if (betLegEventsError) throw betLegEventsError;
+
+  for (const link of betLegEvents ?? []) {
+    const { data: existingOnTarget, error: existingError } = await supabase
+      .from("bet_leg_events")
+      .select("id")
+      .eq("bet_leg_id", link.bet_leg_id)
+      .eq("event_id", targetEventId)
+      .maybeSingle();
+    if (existingError) throw existingError;
+
+    if (existingOnTarget) {
+      const { error: deleteError } = await supabase.from("bet_leg_events").delete().eq("id", link.id);
+      if (deleteError) throw deleteError;
+    } else {
+      const { error: updateError } = await supabase
+        .from("bet_leg_events")
+        .update({ event_id: targetEventId })
+        .eq("id", link.id);
+      if (updateError) throw updateError;
+    }
   }
 
   const { data: mappings, error: mappingsError } = await supabase

@@ -2,15 +2,26 @@
 // camelCase domain types in src/lib/types/domain.ts.
 
 import type {
+  BetLeg,
+  BetLegEvent,
+  BetLegSubject,
   Event,
   EventSource,
   EventStatus,
+  ImportRecord,
+  ImportSource,
+  ImportStatus,
+  LegSettlement,
+  LiveLegState,
   MappedEntityType,
   MatchMethod,
   Participant,
   ParticipantType,
   ProviderMapping,
+  RootingDirection,
   Team,
+  Ticket,
+  TicketStatus,
   UserPreferences,
 } from "@/lib/types/domain";
 
@@ -169,5 +180,191 @@ export function toProviderMapping(row: ProviderMappingRow): ProviderMapping {
     locked: row.locked,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+export interface TicketRow {
+  id: string;
+  user_id: string;
+  name: string | null;
+  generated_name: string | null;
+  sportsbook: string | null;
+  sportsbook_ticket_id: string | null;
+  stake_cents: number;
+  to_win_cents: number;
+  total_return_cents: number;
+  actual_return_cents: number | null;
+  is_bonus_bet: boolean;
+  odds_american: number | null;
+  placed_at: string | null;
+  notes: string | null;
+  promotion_note: string | null;
+  tags: string[];
+  manual_status: TicketStatus | null;
+  settled_at: string | null;
+  sort_key: string;
+  import_record_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BetLegRow {
+  id: string;
+  user_id: string;
+  ticket_id: string;
+  sport: string;
+  league: string | null;
+  raw_description: string | null;
+  market_type: string;
+  selection: string | null;
+  line: number | null;
+  odds_american: number | null;
+  automatic_status: LegSettlement | null;
+  manual_status: LegSettlement | null;
+  automatic_live_state: LiveLegState | null;
+  manual_live_state: LiveLegState | null;
+  live_detail: string | null;
+  automatic_current_value: number | null;
+  manual_current_value: number | null;
+  target_value: number | null;
+  progress_unit: string | null;
+  automatic_changed_at: string | null;
+  manual_set_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BetLegEventRow {
+  id: string;
+  user_id: string;
+  bet_leg_id: string;
+  event_id: string;
+  match_method: MatchMethod;
+  created_at: string;
+}
+
+export interface BetLegSubjectRow {
+  id: string;
+  user_id: string;
+  bet_leg_id: string;
+  participant_id: string | null;
+  team_id: string | null;
+  direction: RootingDirection;
+  direction_source: MatchMethod;
+  match_method: MatchMethod;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImportRecordRow {
+  id: string;
+  user_id: string;
+  source: ImportSource;
+  status: ImportStatus;
+  extracted_text: string | null;
+  parsed_payload: unknown;
+  original_filename: string | null;
+  storage_path: string | null;
+  parse_error: string | null;
+  created_at: string;
+  approved_at: string | null;
+}
+
+export function toTicket(row: TicketRow): Ticket {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    generatedName: row.generated_name,
+    sportsbook: row.sportsbook,
+    sportsbookTicketId: row.sportsbook_ticket_id,
+    stakeCents: row.stake_cents,
+    toWinCents: row.to_win_cents,
+    totalReturnCents: row.total_return_cents,
+    actualReturnCents: row.actual_return_cents,
+    isBonusBet: row.is_bonus_bet,
+    oddsAmerican: row.odds_american,
+    placedAt: row.placed_at,
+    notes: row.notes,
+    promotionNote: row.promotion_note,
+    tags: row.tags,
+    manualStatus: row.manual_status,
+    settledAt: row.settled_at,
+    sortKey: row.sort_key,
+    importRecordId: row.import_record_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toBetLeg(row: BetLegRow): BetLeg {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    ticketId: row.ticket_id,
+    sport: row.sport,
+    league: row.league,
+    rawDescription: row.raw_description,
+    marketType: row.market_type,
+    selection: row.selection,
+    line: row.line,
+    oddsAmerican: row.odds_american,
+    automaticStatus: row.automatic_status,
+    manualStatus: row.manual_status,
+    automaticLiveState: row.automatic_live_state,
+    manualLiveState: row.manual_live_state,
+    liveDetail: row.live_detail,
+    automaticCurrentValue: row.automatic_current_value,
+    manualCurrentValue: row.manual_current_value,
+    targetValue: row.target_value,
+    progressUnit: row.progress_unit,
+    automaticChangedAt: row.automatic_changed_at,
+    manualSetAt: row.manual_set_at,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toBetLegEvent(row: BetLegEventRow): BetLegEvent {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    betLegId: row.bet_leg_id,
+    eventId: row.event_id,
+    matchMethod: row.match_method,
+    createdAt: row.created_at,
+  };
+}
+
+export function toBetLegSubject(row: BetLegSubjectRow): BetLegSubject {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    betLegId: row.bet_leg_id,
+    participantId: row.participant_id,
+    teamId: row.team_id,
+    direction: row.direction,
+    directionSource: row.direction_source,
+    matchMethod: row.match_method,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toImportRecord(row: ImportRecordRow): ImportRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    source: row.source,
+    status: row.status,
+    extractedText: row.extracted_text,
+    parsedPayload: row.parsed_payload,
+    originalFilename: row.original_filename,
+    storagePath: row.storage_path,
+    parseError: row.parse_error,
+    createdAt: row.created_at,
+    approvedAt: row.approved_at,
   };
 }
