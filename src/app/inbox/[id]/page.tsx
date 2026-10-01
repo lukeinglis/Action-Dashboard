@@ -2,10 +2,23 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { toImportRecord, type ImportRecordRow } from "@/lib/db/rows";
 import { fetchMatchCandidates } from "@/lib/import/candidates";
-import type { ImportReview } from "@/lib/import/pipeline";
+import type { ImportReview, DfsImportReview, FantasyImportReview } from "@/lib/import/pipeline";
 import { getImportRecordImageUrl } from "../actions";
 import { TranscribeForm } from "./TranscribeForm";
 import { ReviewForm } from "./ReviewForm";
+import { DfsReviewForm } from "./DfsReviewForm";
+import { FantasyReviewForm } from "./FantasyReviewForm";
+
+/**
+ * `parsed_payload` is a discriminated `{ kind, review }` (docs/PRD.md
+ * section 43: "Screenshot parsing should distinguish" ticket, DFS lineup,
+ * and fantasy matchup) so this page can route to the matching review
+ * component without re-parsing anything.
+ */
+type ParsedPayload =
+  | { kind: "bet_slip"; review: ImportReview }
+  | { kind: "dfs_lineup"; review: DfsImportReview }
+  | { kind: "fantasy_matchup"; review: FantasyImportReview };
 
 export default async function InboxItemPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -29,6 +42,10 @@ export default async function InboxItemPage({ params }: { params: Promise<{ id: 
   const imageUrl = record.storagePath ? await getImportRecordImageUrl(record.storagePath) : null;
 
   const isReview = record.status === "needs_review" && record.parsedPayload;
+  const payload = isReview ? (record.parsedPayload as ParsedPayload) : null;
+  const eventOptions = isReview
+    ? (await fetchMatchCandidates(supabase, user.id)).events.map((e) => ({ id: e.id, name: e.name }))
+    : [];
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-6">
@@ -56,12 +73,26 @@ export default async function InboxItemPage({ params }: { params: Promise<{ id: 
           <p className="p-4 text-sm text-neutral-500">No source available.</p>
         )}
 
-        {isReview ? (
+        {payload?.kind === "bet_slip" ? (
           <ReviewForm
             importRecordId={record.id}
             storagePath={record.storagePath ?? null}
-            review={record.parsedPayload as ImportReview}
-            events={(await fetchMatchCandidates(supabase, user.id)).events.map((e) => ({ id: e.id, name: e.name }))}
+            review={payload.review}
+            events={eventOptions}
+          />
+        ) : payload?.kind === "dfs_lineup" ? (
+          <DfsReviewForm
+            importRecordId={record.id}
+            storagePath={record.storagePath ?? null}
+            review={payload.review}
+            events={eventOptions}
+          />
+        ) : payload?.kind === "fantasy_matchup" ? (
+          <FantasyReviewForm
+            importRecordId={record.id}
+            storagePath={record.storagePath ?? null}
+            review={payload.review}
+            events={eventOptions}
           />
         ) : (
           <TranscribeForm importRecordId={record.id} storagePath={record.storagePath ?? null} />

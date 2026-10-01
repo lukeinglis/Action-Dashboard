@@ -12,6 +12,7 @@ interface Query {
   delete(): Query;
   eq(col: string, val: unknown): Query;
   is(col: string, val: unknown): Query;
+  in(col: string, vals: unknown[]): Query;
   single(): Promise<{ data: Row | null; error: Error | null }>;
   maybeSingle(): Promise<{ data: Row | null; error: Error | null }>;
   then<T>(
@@ -98,6 +99,10 @@ export function createFakeSupabase(initialTables: Tables) {
       },
       is(col, val) {
         filters.push((row) => row[col] === val);
+        return query;
+      },
+      in(col, vals) {
+        filters.push((row) => vals.includes(row[col]));
         return query;
       },
       async single() {

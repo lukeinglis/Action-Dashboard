@@ -1,0 +1,52 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
+import { markFantasyMatchupFinal } from "./fantasy/actions";
+import type { FantasyMatchupPaneItem } from "./types";
+
+export function FantasyPane({ items }: { items: FantasyMatchupPaneItem[] }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  function onMarkFinal(matchupId: string) {
+    startTransition(async () => {
+      await markFantasyMatchupFinal(matchupId);
+      router.refresh();
+    });
+  }
+
+  return (
+    <aside className="space-y-3 rounded-lg border border-neutral-800 p-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-neutral-100">Fantasy</h2>
+        <Link href="/fantasy/new" className="text-xs text-neutral-300 underline">
+          + New
+        </Link>
+      </div>
+      {items.length === 0 && <p className="text-xs text-neutral-500">No active fantasy matchups.</p>}
+      <ul className="space-y-2">
+        {items.map((item) => (
+          <li key={item.matchupId} className="rounded border border-neutral-800 p-2">
+            <p className="text-xs font-medium text-neutral-100">{item.leagueName}</p>
+            <p className="text-xs text-neutral-400">
+              {item.userTeamName} vs {item.opponentTeamName}
+              {item.week ? ` · Week ${item.week}` : ""}
+            </p>
+            {item.showMarkFinal && (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => onMarkFinal(item.matchupId)}
+                className="mt-1 rounded bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-900 disabled:opacity-50"
+              >
+                Mark Final
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </aside>
+  );
+}

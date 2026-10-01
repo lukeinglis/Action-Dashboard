@@ -8,9 +8,17 @@ import type {
   DashboardView,
   DashboardViewFilters,
   DashboardViewLayout,
+  DFSEntry,
+  DFSEntryStatus,
+  DFSLineup,
+  DFSLineupSlot,
   Event,
   EventSource,
   EventStatus,
+  FantasyLeague,
+  FantasyMatchup,
+  FantasyMatchupStatus,
+  FantasyRosterSlot,
   ImportRecord,
   ImportSource,
   ImportStatus,
@@ -22,6 +30,7 @@ import type {
   ParticipantType,
   ProviderMapping,
   RootingDirection,
+  RosterSlotSide,
   Team,
   Ticket,
   TicketStatus,
@@ -411,6 +420,228 @@ export function toWorkspaceState(row: WorkspaceStateRow): WorkspaceState {
     baseViewId: row.base_view_id,
     filters: row.filters,
     layout: row.layout,
+    updatedAt: row.updated_at,
+  };
+}
+
+// Phase 5: Fantasy and DFS. Mirrors
+// supabase/migrations/20261001000000_create_phase5_fantasy_dfs.sql and
+// docs/PRD.md sections 34-45.
+
+export interface FantasyLeagueRow {
+  id: string;
+  user_id: string;
+  name: string;
+  platform: string | null;
+  sport: string;
+  season: string;
+  user_team_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FantasyMatchupRow {
+  id: string;
+  user_id: string;
+  fantasy_league_id: string;
+  week: number | null;
+  user_team_name: string;
+  opponent_team_name: string;
+  automatic_user_score: number | null;
+  automatic_opponent_score: number | null;
+  manual_user_score: number | null;
+  manual_opponent_score: number | null;
+  user_projected_score: number | null;
+  opponent_projected_score: number | null;
+  automatic_changed_at: string | null;
+  manual_set_at: string | null;
+  status: FantasyMatchupStatus;
+  finalized_at: string | null;
+  sort_key: string;
+  import_record_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FantasyRosterSlotRow {
+  id: string;
+  user_id: string;
+  fantasy_matchup_id: string;
+  side: RosterSlotSide;
+  slot: string;
+  participant_id: string | null;
+  participant_match_method: MatchMethod | null;
+  player_name: string;
+  projected_points: number | null;
+  automatic_actual_points: number | null;
+  manual_actual_points: number | null;
+  automatic_changed_at: string | null;
+  manual_set_at: string | null;
+  event_id: string | null;
+  event_match_method: MatchMethod | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DFSLineupRow {
+  id: string;
+  user_id: string;
+  platform: string;
+  sport: string;
+  slate_name: string | null;
+  import_record_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DFSLineupSlotRow {
+  id: string;
+  user_id: string;
+  dfs_lineup_id: string;
+  slot: string;
+  participant_id: string | null;
+  participant_match_method: MatchMethod | null;
+  player_name: string;
+  salary: number | null;
+  automatic_actual_points: number | null;
+  manual_actual_points: number | null;
+  automatic_changed_at: string | null;
+  manual_set_at: string | null;
+  event_id: string | null;
+  event_match_method: MatchMethod | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DFSEntryRow {
+  id: string;
+  user_id: string;
+  dfs_lineup_id: string;
+  contest_name: string | null;
+  entry_fee_cents: number | null;
+  potential_prize_cents: number | null;
+  automatic_current_points: number | null;
+  manual_current_points: number | null;
+  automatic_changed_at: string | null;
+  manual_set_at: string | null;
+  status: DFSEntryStatus;
+  finalized_at: string | null;
+  sort_key: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function toFantasyLeague(row: FantasyLeagueRow): FantasyLeague {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    platform: row.platform,
+    sport: row.sport,
+    season: row.season,
+    userTeamName: row.user_team_name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toFantasyMatchup(row: FantasyMatchupRow): FantasyMatchup {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    fantasyLeagueId: row.fantasy_league_id,
+    week: row.week,
+    userTeamName: row.user_team_name,
+    opponentTeamName: row.opponent_team_name,
+    automaticUserScore: row.automatic_user_score,
+    automaticOpponentScore: row.automatic_opponent_score,
+    manualUserScore: row.manual_user_score,
+    manualOpponentScore: row.manual_opponent_score,
+    userProjectedScore: row.user_projected_score,
+    opponentProjectedScore: row.opponent_projected_score,
+    automaticChangedAt: row.automatic_changed_at,
+    manualSetAt: row.manual_set_at,
+    status: row.status,
+    finalizedAt: row.finalized_at,
+    sortKey: row.sort_key,
+    importRecordId: row.import_record_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toFantasyRosterSlot(row: FantasyRosterSlotRow): FantasyRosterSlot {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    fantasyMatchupId: row.fantasy_matchup_id,
+    side: row.side,
+    slot: row.slot,
+    participantId: row.participant_id,
+    participantMatchMethod: row.participant_match_method,
+    playerName: row.player_name,
+    projectedPoints: row.projected_points,
+    automaticActualPoints: row.automatic_actual_points,
+    manualActualPoints: row.manual_actual_points,
+    automaticChangedAt: row.automatic_changed_at,
+    manualSetAt: row.manual_set_at,
+    eventId: row.event_id,
+    eventMatchMethod: row.event_match_method,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toDFSLineup(row: DFSLineupRow): DFSLineup {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    platform: row.platform,
+    sport: row.sport,
+    slateName: row.slate_name,
+    importRecordId: row.import_record_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toDFSLineupSlot(row: DFSLineupSlotRow): DFSLineupSlot {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    dfsLineupId: row.dfs_lineup_id,
+    slot: row.slot,
+    participantId: row.participant_id,
+    participantMatchMethod: row.participant_match_method,
+    playerName: row.player_name,
+    salary: row.salary,
+    automaticActualPoints: row.automatic_actual_points,
+    manualActualPoints: row.manual_actual_points,
+    automaticChangedAt: row.automatic_changed_at,
+    manualSetAt: row.manual_set_at,
+    eventId: row.event_id,
+    eventMatchMethod: row.event_match_method,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toDFSEntry(row: DFSEntryRow): DFSEntry {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    dfsLineupId: row.dfs_lineup_id,
+    contestName: row.contest_name,
+    entryFeeCents: row.entry_fee_cents,
+    potentialPrizeCents: row.potential_prize_cents,
+    automaticCurrentPoints: row.automatic_current_points,
+    manualCurrentPoints: row.manual_current_points,
+    automaticChangedAt: row.automatic_changed_at,
+    manualSetAt: row.manual_set_at,
+    status: row.status,
+    finalizedAt: row.finalized_at,
+    sortKey: row.sort_key,
+    createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }

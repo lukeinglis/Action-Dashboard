@@ -15,7 +15,7 @@
 // and the whole ImportRecord is marked failed rather than saving a partial
 // or guessed result.
 
-import { dollarsToCents } from "@/lib/betting/money";
+import { extractDollarCents, normalizeLineEndings, parseKeyValueLines } from "./text-blocks";
 
 export class SlipParseError extends Error {}
 
@@ -47,21 +47,11 @@ export interface ParsedTicket {
   raw: string;
 }
 
-function parseKeyValueLines(block: string): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const line of block.split("\n")) {
-    const match = line.match(/^\s*([A-Za-z ]+):\s*(.*)$/);
-    if (!match) continue;
-    map.set(match[1].trim().toLowerCase(), match[2].trim());
-  }
-  return map;
-}
-
 function parseDollars(raw: string | undefined, field: string, ticketRaw: string): number {
   if (!raw) throw new SlipParseError(`Missing "${field}" in ticket:\n${ticketRaw}`);
-  const match = raw.match(/-?\$?([\d,]+(?:\.\d+)?)/);
-  if (!match) throw new SlipParseError(`Could not parse "${field}" value "${raw}" in ticket:\n${ticketRaw}`);
-  return dollarsToCents(parseFloat(match[1].replace(/,/g, "")));
+  const cents = extractDollarCents(raw);
+  if (cents === null) throw new SlipParseError(`Could not parse "${field}" value "${raw}" in ticket:\n${ticketRaw}`);
+  return cents;
 }
 
 function parseOneLeg(legBlock: string, ticketRaw: string): ParsedLeg {
@@ -164,10 +154,7 @@ function parseOneTicket(ticketRaw: string): ParsedTicket {
  * mark the ImportRecord "failed" with the message, never save a guess.
  */
 export function parseSlipText(text: string): ParsedTicket[] {
-  // Native <textarea> form submission normalizes line endings to CRLF
-  // regardless of how the user typed or pasted the text, so normalize back
-  // to LF before any line-based parsing below.
-  const trimmed = text.replace(/\r\n/g, "\n").trim();
+  const trimmed = normalizeLineEndings(text).trim();
   if (trimmed.length === 0) {
     throw new SlipParseError("No text to parse.");
   }

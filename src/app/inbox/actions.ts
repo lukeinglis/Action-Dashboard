@@ -16,8 +16,25 @@ import { setBetLegSubject } from "@/lib/tickets/bet-leg-subjects";
 import { getUserPreferences } from "@/lib/preferences/get-user-preferences";
 import { extractScreenshotText } from "@/lib/import/extract-screenshot";
 import { SlipParseError } from "@/lib/import/parse-slip-text";
-import { buildImportReview, DEFAULT_SPORTSBOOK, type ApprovedTicketGroup } from "@/lib/import/pipeline";
-import { fetchDuplicateCandidates, fetchMatchCandidates } from "@/lib/import/candidates";
+import { DfsLineupParseError } from "@/lib/import/parse-dfs-lineup";
+import { FantasyMatchupParseError } from "@/lib/import/parse-fantasy-matchup";
+import { detectImportKind, UnknownImportKindError } from "@/lib/import/detect-kind";
+import {
+  buildImportReview,
+  buildDfsLineupReview,
+  buildFantasyMatchupReview,
+  DEFAULT_SPORTSBOOK,
+  type ApprovedTicketGroup,
+  type ApprovedDfsLineupGroup,
+  type ApprovedFantasyMatchupGroup,
+} from "@/lib/import/pipeline";
+import { fetchDuplicateCandidates, fetchMatchCandidates, fetchPlayerSlotCandidates } from "@/lib/import/candidates";
+import { createDfsLineup } from "@/lib/dfs/lineups";
+import { createDfsLineupSlot } from "@/lib/dfs/lineup-slots";
+import { createDfsEntry } from "@/lib/dfs/entries";
+import { findOrCreateFantasyLeague } from "@/lib/fantasy/leagues";
+import { createFantasyMatchup } from "@/lib/fantasy/matchups";
+import { createFantasyRosterSlot } from "@/lib/fantasy/roster-slots";
 
 const BUCKET = "screenshots";
 
@@ -34,6 +51,12 @@ async function requireUserId(supabase: Awaited<ReturnType<typeof createClient>>)
  * text and saves the result onto the ImportRecord: `needs_review` with the
  * proposed review payload on success, or `failed` with the error on any
  * structural parse problem — the parser never silently saves a guess.
+ *
+ * `detectImportKind` (docs/PRD.md section 43) first tells a sportsbook
+ * ticket, a DFS lineup, and a fantasy matchup apart by header line, then
+ * dispatches to the matching parser/matcher pair. The saved `parsed_payload`
+ * is a discriminated `{ kind, review }` so the review screen and the
+ * approval Server Actions below know which shape they're looking at.
  */
 async function runImportPipeline(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -42,20 +65,40 @@ async function runImportPipeline(
   text: string,
 ): Promise<void> {
   try {
-    const [candidates, existingTickets, preferences] = await Promise.all([
-      fetchMatchCandidates(supabase, userId),
-      fetchDuplicateCandidates(supabase, userId),
-      getUserPreferences(supabase, userId),
-    ]);
-    const review = buildImportReview(text, candidates, existingTickets, preferences.timezone);
+    const kind = detectImportKind(text);
+    let parsedPayload: unknown;
+
+    if (kind === "bet_slip") {
+      const [candidates, existingTickets, preferences] = await Promise.all([
+        fetchMatchCandidates(supabase, userId),
+        fetchDuplicateCandidates(supabase, userId),
+        getUserPreferences(supabase, userId),
+      ]);
+      const review = buildImportReview(text, candidates, existingTickets, preferences.timezone);
+      parsedPayload = { kind, review };
+    } else if (kind === "dfs_lineup") {
+      const candidates = await fetchPlayerSlotCandidates(supabase, userId);
+      const review = buildDfsLineupReview(text, candidates);
+      parsedPayload = { kind, review };
+    } else {
+      const candidates = await fetchPlayerSlotCandidates(supabase, userId);
+      const review = buildFantasyMatchupReview(text, candidates);
+      parsedPayload = { kind, review };
+    }
 
     const { error } = await supabase
       .from("import_records")
-      .update({ status: "needs_review", extracted_text: text, parsed_payload: review, parse_error: null })
+      .update({ status: "needs_review", extracted_text: text, parsed_payload: parsedPayload, parse_error: null })
       .eq("id", importRecordId);
     if (error) throw error;
   } catch (err: unknown) {
-    const message = err instanceof SlipParseError ? err.message : `Import failed: ${(err as Error).message}`;
+    const message =
+      err instanceof SlipParseError ||
+      err instanceof DfsLineupParseError ||
+      err instanceof FantasyMatchupParseError ||
+      err instanceof UnknownImportKindError
+        ? err.message
+        : `Import failed: ${(err as Error).message}`;
     const { error } = await supabase
       .from("import_records")
       .update({ status: "failed", extracted_text: text, parse_error: message })
@@ -239,6 +282,141 @@ export async function approveParsedImport(
 
   revalidatePath("/inbox");
   revalidatePath("/tickets");
+  redirect("/inbox");
+}
+
+/**
+ * Approves a reviewed, parsed DFS lineup ImportRecord: creates one DFSLineup
+ * per surviving group (after any edits made on the review screen), its
+ * DFSLineupSlots with their proposed Participant/Event links, and one
+ * DFSEntry for the lineup, then deletes the stored image and marks the
+ * ImportRecord approved (docs/PRD.md sections 29.1, 30, 40-43). A group with
+ * no slots is skipped — the user removed it during review.
+ */
+export async function approveParsedDfsLineup(
+  importRecordId: string,
+  storagePath: string | null,
+  groups: ApprovedDfsLineupGroup[],
+): Promise<void> {
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
+
+  for (const group of groups) {
+    if (group.slots.length === 0) continue;
+
+    const lineup = await createDfsLineup(supabase, userId, {
+      platform: group.platform,
+      sport: group.sport,
+      slateName: group.slateName,
+      importRecordId,
+    });
+
+    for (const slot of group.slots) {
+      await createDfsLineupSlot(supabase, userId, {
+        dfsLineupId: lineup.id,
+        slot: slot.slot,
+        playerName: slot.playerName,
+        participantId: slot.participantId,
+        participantMatchMethod: slot.participantId ? "auto" : undefined,
+        salary: slot.salary,
+        automaticActualPoints: slot.automaticActualPoints,
+        eventId: slot.eventId,
+        eventMatchMethod: slot.eventId ? "auto" : undefined,
+      });
+    }
+
+    await createDfsEntry(supabase, userId, {
+      dfsLineupId: lineup.id,
+      contestName: group.contestName,
+      entryFeeCents: group.entryFeeCents,
+      potentialPrizeCents: group.potentialPrizeCents,
+      automaticCurrentPoints: group.automaticCurrentPoints,
+    });
+  }
+
+  if (storagePath) {
+    await supabase.storage.from(BUCKET).remove([storagePath]);
+  }
+  await approveImportRecordLib(supabase, importRecordId);
+
+  revalidatePath("/inbox");
+  revalidatePath("/dfs");
+  redirect("/inbox");
+}
+
+/**
+ * Approves a reviewed, parsed Fantasy Matchup ImportRecord: finds or creates
+ * the named FantasyLeague, creates one FantasyMatchup per surviving group
+ * (after any edits made on the review screen) and its FantasyRosterSlots
+ * with their proposed Participant/Event links, then deletes the stored
+ * image and marks the ImportRecord approved (docs/PRD.md sections 29.1, 30,
+ * 34-38, 43). A group with no starters on either side is skipped — the user
+ * removed it during review.
+ */
+export async function approveParsedFantasyMatchup(
+  importRecordId: string,
+  storagePath: string | null,
+  groups: ApprovedFantasyMatchupGroup[],
+): Promise<void> {
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
+
+  for (const group of groups) {
+    if (group.starters.length === 0 && group.opponentStarters.length === 0) continue;
+
+    const league = await findOrCreateFantasyLeague(supabase, userId, {
+      name: group.leagueName,
+      platform: group.platform,
+      sport: group.sport,
+      season: group.season,
+      userTeamName: group.userTeamName,
+    });
+
+    const matchup = await createFantasyMatchup(supabase, userId, {
+      fantasyLeagueId: league.id,
+      week: group.week,
+      userTeamName: group.userTeamName,
+      opponentTeamName: group.opponentTeamName,
+      automaticUserScore: group.automaticUserScore,
+      automaticOpponentScore: group.automaticOpponentScore,
+      userProjectedScore: group.userProjectedScore,
+      opponentProjectedScore: group.opponentProjectedScore,
+      importRecordId,
+    });
+
+    for (const starter of group.starters) {
+      await createFantasyRosterSlot(supabase, userId, {
+        fantasyMatchupId: matchup.id,
+        side: "user",
+        slot: "Starter",
+        playerName: starter.playerName,
+        participantId: starter.participantId,
+        participantMatchMethod: starter.participantId ? "auto" : undefined,
+        eventId: starter.eventId,
+        eventMatchMethod: starter.eventId ? "auto" : undefined,
+      });
+    }
+    for (const starter of group.opponentStarters) {
+      await createFantasyRosterSlot(supabase, userId, {
+        fantasyMatchupId: matchup.id,
+        side: "opponent",
+        slot: "Starter",
+        playerName: starter.playerName,
+        participantId: starter.participantId,
+        participantMatchMethod: starter.participantId ? "auto" : undefined,
+        eventId: starter.eventId,
+        eventMatchMethod: starter.eventId ? "auto" : undefined,
+      });
+    }
+  }
+
+  if (storagePath) {
+    await supabase.storage.from(BUCKET).remove([storagePath]);
+  }
+  await approveImportRecordLib(supabase, importRecordId);
+
+  revalidatePath("/inbox");
+  revalidatePath("/fantasy");
   redirect("/inbox");
 }
 

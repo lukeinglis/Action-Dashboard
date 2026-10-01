@@ -83,4 +83,25 @@ describe("deleteImportRecord", () => {
     expect(supabase.tables.tickets.find((t) => t.id === "t1")?.import_record_id).toBeNull();
     expect(supabase.tables.tickets.find((t) => t.id === "t2")?.import_record_id).toBe("other");
   });
+
+  it("nulls importRecordId on created FantasyMatchups and DFSLineups but leaves them in place (docs/PRD.md section 63.1)", async () => {
+    const supabase = createFakeSupabase({
+      import_records: [{ id: "r1" }],
+      fantasy_matchups: [
+        { id: "m1", import_record_id: "r1" },
+        { id: "m2", import_record_id: "other" },
+      ],
+      dfs_lineups: [
+        { id: "l1", import_record_id: "r1" },
+        { id: "l2", import_record_id: "other" },
+      ],
+    });
+
+    await deleteImportRecord(supabase as never, "r1");
+
+    expect(supabase.tables.fantasy_matchups.find((m) => m.id === "m1")?.import_record_id).toBeNull();
+    expect(supabase.tables.fantasy_matchups.find((m) => m.id === "m2")?.import_record_id).toBe("other");
+    expect(supabase.tables.dfs_lineups.find((l) => l.id === "l1")?.import_record_id).toBeNull();
+    expect(supabase.tables.dfs_lineups.find((l) => l.id === "l2")?.import_record_id).toBe("other");
+  });
 });

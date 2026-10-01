@@ -4,11 +4,14 @@
 // src/lib/recommend/anthropic.ts — one endpoint, one JSON shape, no need
 // for the SDK's transitive deps.
 //
-// Claude is asked to transcribe the screenshot directly into the "Bet
-// Slip" text format that parseSlipText expects, so the screenshot and
-// paste-text inputs converge on the same deterministic parser
-// immediately after extraction — extraction only has to get the layout
-// and field values right, not any downstream parsing logic.
+// Claude is asked to transcribe the screenshot directly into one of three
+// strict text formats — "Bet Slip", "DFS Lineup", or "Fantasy Matchup" —
+// so the screenshot and paste-text inputs converge on the same
+// deterministic parsers immediately after extraction (docs/PRD.md section
+// 43: "Screenshot parsing should distinguish: sportsbook Ticket, DFS
+// Lineup, Fantasy Matchup"). Extraction only has to pick the right format
+// and get the layout/field values right; detect-kind.ts then routes the
+// transcribed text to the matching parser by its header line.
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_MODEL = "claude-haiku-4-5";
@@ -16,7 +19,9 @@ const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_OUTPUT_TOKENS = 4_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 
-const SYSTEM_PROMPT = `You transcribe sportsbook bet-slip screenshots into a strict text format. Output ONLY the transcribed text — no commentary, no markdown fences.
+const SYSTEM_PROMPT = `You transcribe screenshots of sportsbook bet slips, season-long fantasy matchups, or DFS (daily fantasy sports) lineups into one of three strict text formats. First decide which of the three the screenshot shows, then output ONLY the transcribed text in that one format — no commentary, no markdown fences, no mixing formats in one response.
+
+=== FORMAT 1: Bet Slip (sportsbook ticket, e.g. DraftKings/FanDuel Sportsbook) ===
 
 One screenshot may show one or more bet slips ("tickets"). Emit one block per ticket, back to back, each starting with a line of the exact form:
 Bet Slip #<ticket id>
@@ -43,7 +48,50 @@ Payout: $<amount>
 Placed: <ISO 8601 UTC timestamp>       (omit if not shown)
 Promo: <free-text promo name, e.g. "Profit Boost">  (omit if not shown)
 
-Transcribe values exactly as shown on the screenshot. Do not invent or infer any value that isn't visibly present — omit the line instead.`;
+=== FORMAT 2: Fantasy Matchup (season-long fantasy, e.g. Sleeper/ESPN/Yahoo matchup screen) ===
+
+One screenshot may show one or more matchups. Emit one block per matchup, back to back, each starting with the literal line:
+Fantasy Matchup
+
+Within each matchup block, in this order:
+Platform: <e.g. Sleeper, ESPN, Yahoo>  (omit if not shown)
+League: <the fantasy league's name>
+Sport: <sport>/<league>                (e.g. "football/NFL"; omit "/<league>" if not shown)
+Season: <e.g. 2026>                    (omit if not shown)
+Week: <numeric week>                   (omit if not shown)
+My Team: <the user's fantasy team name>
+Opponent: <the opponent's fantasy team name>
+My Score: <numeric current score>      (omit if not shown)
+Opponent Score: <numeric current score> (omit if not shown)
+My Projected: <numeric projected score> (omit if not shown)
+Opponent Projected: <numeric projected score> (omit if not shown)
+Starter: <player name>                 (one line per starter on the user's side, in the order shown; do NOT include bench players)
+(repeat "Starter:" for every starter on the user's side)
+Opponent Starter: <player name>        (one line per starter on the opponent's side, in the order shown; do NOT include bench players)
+(repeat "Opponent Starter:" for every starter on the opponent's side)
+
+=== FORMAT 3: DFS Lineup (daily fantasy sports, e.g. DraftKings DFS contest entry) ===
+
+One screenshot may show one or more lineups/entries. Emit one block per lineup, back to back, each starting with the literal line:
+DFS Lineup
+
+Within each lineup block, in this order:
+Platform: <e.g. DraftKings>
+Sport: <sport>/<league>                (e.g. "football/NFL"; omit "/<league>" if not shown)
+Slate: <slate name, e.g. "Main Slate"> (omit if not shown)
+Slot: <roster slot label, e.g. QB, RB, FLEX, DST>
+Player: <player name>
+Salary: <numeric DFS salary, no "$" or "," characters>  (omit if not shown)
+Points: <numeric points for this player>  (omit if not shown)
+(repeat "Slot:" through "Points:" for every roster slot, in the order shown)
+Contest: <contest name, e.g. "Millionaire Maker">  (omit if not shown)
+Entry Fee: $<amount>                   (omit if not shown)
+Prize: $<amount>                       (the potential/guaranteed prize for this entry; omit if not shown)
+Current Points: <numeric total current points for the entry>  (omit if not shown)
+
+=== General rules ===
+
+Transcribe values exactly as shown on the screenshot. Do not invent or infer any value that isn't visibly present — omit the line instead. Every emitted block must use exactly one of the three formats above; never blend fields from different formats in the same block.`;
 
 export interface ExtractScreenshotArgs {
   apiKey: string;

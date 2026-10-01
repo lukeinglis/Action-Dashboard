@@ -307,3 +307,156 @@ export interface WorkspaceState {
 
   updatedAt: string;
 }
+
+// Phase 5: Fantasy and DFS. Mirrors
+// supabase/migrations/20261001000000_create_phase5_fantasy_dfs.sql and
+// docs/PRD.md sections 34-45, 63, 63.1.
+
+export type FantasyMatchupStatus = "upcoming" | "live" | "final";
+export type DFSEntryStatus = "upcoming" | "live" | "final";
+export type RosterSlotSide = "user" | "opponent";
+
+export interface FantasyLeague {
+  id: string;
+  userId: string;
+
+  name: string;
+  platform?: string | null;
+
+  sport: string;
+  season: string;
+
+  userTeamName?: string | null;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FantasyMatchup {
+  id: string;
+  userId: string;
+  fantasyLeagueId: string;
+
+  week?: number | null;
+
+  userTeamName: string;
+  opponentTeamName: string;
+
+  automaticUserScore?: number | null;
+  automaticOpponentScore?: number | null;
+
+  manualUserScore?: number | null;
+  manualOpponentScore?: number | null;
+
+  userProjectedScore?: number | null;
+  opponentProjectedScore?: number | null;
+
+  automaticChangedAt?: string | null;
+  manualSetAt?: string | null;
+
+  status: FantasyMatchupStatus;
+  finalizedAt?: string | null;
+
+  sortKey: string;
+
+  importRecordId?: string | null;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FantasyRosterSlot {
+  id: string;
+  userId: string;
+  fantasyMatchupId: string;
+
+  side: RosterSlotSide;
+  slot: string;
+
+  participantId?: string | null;
+  participantMatchMethod?: MatchMethod | null;
+
+  playerName: string;
+
+  projectedPoints?: number | null;
+
+  automaticActualPoints?: number | null;
+  manualActualPoints?: number | null;
+
+  automaticChangedAt?: string | null;
+  manualSetAt?: string | null;
+
+  eventId?: string | null;
+  eventMatchMethod?: MatchMethod | null;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DFSLineup {
+  id: string;
+  userId: string;
+
+  platform: string;
+  sport: string;
+
+  slateName?: string | null;
+
+  importRecordId?: string | null;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DFSLineupSlot {
+  id: string;
+  userId: string;
+  dfsLineupId: string;
+
+  slot: string;
+
+  participantId?: string | null;
+  participantMatchMethod?: MatchMethod | null;
+
+  playerName: string;
+
+  salary?: number | null;
+
+  automaticActualPoints?: number | null;
+  manualActualPoints?: number | null;
+
+  automaticChangedAt?: string | null;
+  manualSetAt?: string | null;
+
+  eventId?: string | null;
+  eventMatchMethod?: MatchMethod | null;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DFSEntry {
+  id: string;
+  userId: string;
+
+  dfsLineupId: string;
+
+  contestName?: string | null;
+
+  entryFeeCents?: number | null;
+  potentialPrizeCents?: number | null;
+
+  automaticCurrentPoints?: number | null;
+  manualCurrentPoints?: number | null;
+
+  automaticChangedAt?: string | null;
+  manualSetAt?: string | null;
+
+  status: DFSEntryStatus;
+  finalizedAt?: string | null;
+
+  sortKey: string;
+
+  createdAt: string;
+  updatedAt: string;
+}

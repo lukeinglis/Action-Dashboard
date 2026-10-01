@@ -70,8 +70,9 @@ export async function rejectImportRecord(supabase: SupabaseClient, importRecordI
 
 /**
  * Hard-deletes an ImportRecord; created records remain, with their
- * importRecordId set to null (docs/PRD.md section 63.1). The caller is
- * responsible for deleting the underlying storage object, if any.
+ * importRecordId set to null (docs/PRD.md section 63.1). Tickets,
+ * FantasyMatchups, and DFSLineups all carry an importRecordId. The caller
+ * is responsible for deleting the underlying storage object, if any.
  */
 export async function deleteImportRecord(supabase: SupabaseClient, importRecordId: string): Promise<void> {
   const { error: ticketsError } = await supabase
@@ -79,6 +80,18 @@ export async function deleteImportRecord(supabase: SupabaseClient, importRecordI
     .update({ import_record_id: null })
     .eq("import_record_id", importRecordId);
   if (ticketsError) throw ticketsError;
+
+  const { error: matchupsError } = await supabase
+    .from("fantasy_matchups")
+    .update({ import_record_id: null })
+    .eq("import_record_id", importRecordId);
+  if (matchupsError) throw matchupsError;
+
+  const { error: lineupsError } = await supabase
+    .from("dfs_lineups")
+    .update({ import_record_id: null })
+    .eq("import_record_id", importRecordId);
+  if (lineupsError) throw lineupsError;
 
   const { error } = await supabase.from("import_records").delete().eq("id", importRecordId);
   if (error) throw error;
