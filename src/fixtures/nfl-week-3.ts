@@ -389,3 +389,111 @@ export const expectedTicketStatuses: Record<string, TicketStatus> = {
   "ticket-f": "pending",
   "ticket-g": "active",
 };
+
+// Phase 3 slice (docs/PRD.md section 64.1): DraftKings "Bet Slip" text for
+// the fixture's existing Teams/Events, standing in for real screenshots —
+// none were available (see docs/phase-2.md, "Fixture"), and the screenshot
+// pipeline transcribes into this same text format before parsing, so pasted
+// text exercises the identical downstream code path.
+
+/** A single straight bet matching the existing Hawks @ Wolves Event and both Teams. */
+export const importSlipTextSingleTicket = `Bet Slip #DK-9001
+Type: Straight
+Leg 1:
+Market: moneyline
+Selection: Northfield Hawks
+Event: Northfield Hawks @ Sabertown Wolves
+Sport: football/NFL
+Start: 2026-09-20T17:00:00Z
+Odds: -150
+Wager: $20.00
+To Win: $13.33
+Payout: $33.33
+Placed: 2026-09-19T12:00:00Z`;
+
+/** A 3-leg parlay spanning moneyline, game_total, and a player prop, all matching existing fixture data. */
+export const importSlipTextParlay = `Bet Slip #DK-9002
+Type: 3-Leg Parlay
+Leg 1:
+Market: moneyline
+Selection: Sabertown Wolves
+Event: Northfield Hawks @ Sabertown Wolves
+Sport: football/NFL
+Start: 2026-09-20T17:00:00Z
+Odds: -110
+Leg 2:
+Market: game_total
+Selection: Over 47.5
+OverUnder: over
+Event: Crestview Comets @ Milltown Miners
+Sport: football/NFL
+Start: 2026-09-20T17:00:00Z
+Odds: -110
+Leg 3:
+Market: passing_yards
+Selection: T. Sparks Over 250.5
+Subject: T. Sparks
+OverUnder: over
+Sport: football/NFL
+Odds: -120
+Wager: $10.00
+To Win: $60.00
+Payout: $70.00
+Placed: 2026-09-19T12:05:00Z`;
+
+/** A leg naming teams that don't exist as fixture Teams — exercises "unmatched Event, flagged". */
+export const importSlipTextUnmatchedEvent = `Bet Slip #DK-9003
+Type: Straight
+Leg 1:
+Market: moneyline
+Selection: Some Other Team
+Event: Some Other Team @ Another Team
+Sport: football/NFL
+Odds: +120
+Wager: $5.00
+To Win: $6.00
+Payout: $11.00`;
+
+/** Structurally broken text — no "Bet Slip" header — exercises the parse-failure path. */
+export const importSlipTextMalformed = `Just some random pasted text that isn't a slip at all.`;
+
+/** Three independent tickets pasted (or transcribed from one screenshot) together, standing in for "one screenshot with 3 Tickets" (docs/PRD.md section 64.1). */
+export const importSlipTextThreeTickets = `Bet Slip #DK-9004
+Type: Straight
+Leg 1:
+Market: moneyline
+Selection: Northfield Hawks
+Event: Northfield Hawks @ Sabertown Wolves
+Sport: football/NFL
+Start: 2026-09-20T17:00:00Z
+Odds: -150
+Wager: $20.00
+To Win: $13.33
+Payout: $33.33
+Placed: 2026-09-19T12:00:00Z
+Bet Slip #DK-9005
+Type: Straight
+Leg 1:
+Market: game_total
+Selection: Over 47.5
+OverUnder: over
+Event: Crestview Comets @ Milltown Miners
+Sport: football/NFL
+Start: 2026-09-20T17:00:00Z
+Odds: -110
+Wager: $15.00
+To Win: $13.64
+Payout: $28.64
+Placed: 2026-09-19T12:02:00Z
+Bet Slip #DK-9006
+Type: Straight
+Leg 1:
+Market: season_future
+Selection: Sharks to win division
+Subject: Bayport Sharks
+Sport: football/NFL
+Odds: +450
+Wager: $10.00
+To Win: $45.00
+Payout: $55.00
+Placed: 2026-09-19T12:03:00Z`;

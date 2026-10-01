@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { listPendingImportRecords } from "@/lib/import-records/import-records";
-import { uploadScreenshot } from "./actions";
+import { pasteSlipText, uploadScreenshot } from "./actions";
 
 export default async function InboxPage() {
   const supabase = await createClient();
@@ -41,6 +41,25 @@ export default async function InboxPage() {
           className="rounded bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-900"
         >
           Upload Screenshot
+        </button>
+      </form>
+
+      <form action={pasteSlipText} className="space-y-2 rounded-lg border border-neutral-800 p-4">
+        <label className="block text-xs text-neutral-400">
+          Paste Text
+          <textarea
+            name="text"
+            required
+            rows={4}
+            placeholder="Paste a Bet Slip..."
+            className="mt-1 w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+          />
+        </label>
+        <button
+          type="submit"
+          className="rounded bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-900"
+        >
+          Parse Text
         </button>
       </form>
 
