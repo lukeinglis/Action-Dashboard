@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { activeBetLegSubjects, computeRootingLabels, eventExposureCount } from "./exposure";
+import {
+  activeBetLegSubjects,
+  computeRootingLabels,
+  dfsExposureCount,
+  dfsRootingSubjects,
+  eventExposureCount,
+  fantasyExposureCount,
+  fantasyRootingSubjects,
+} from "./exposure";
 
 describe("activeBetLegSubjects", () => {
   it("keeps only subjects whose leg is open", () => {
@@ -60,5 +68,68 @@ describe("eventExposureCount", () => {
 
   it("scopes to the requested event", () => {
     expect(eventExposureCount("event-2", betLegEvents, legSettlementByLegId, ticketStatusByLegId)).toBe(1);
+  });
+});
+
+describe("fantasyExposureCount", () => {
+  it("counts both user-side and opponent-side roster slots linked to the event", () => {
+    const slots = [
+      { eventId: "event-1" },
+      { eventId: "event-1" },
+      { eventId: "event-2" },
+      { eventId: null },
+    ];
+    expect(fantasyExposureCount("event-1", slots)).toBe(2);
+  });
+});
+
+describe("dfsExposureCount", () => {
+  it("counts a lineup's slots once per event regardless of how many entries use the lineup (docs/PRD.md section 11.6)", () => {
+    const dfsLineupSlots = [
+      { eventId: "event-1", dfsLineupId: "lineup-1" },
+      { eventId: "event-1", dfsLineupId: "lineup-1" },
+      { eventId: "event-2", dfsLineupId: "lineup-1" },
+    ];
+    const dfsEntries = [
+      { dfsLineupId: "lineup-1", status: "upcoming" as const },
+      { dfsLineupId: "lineup-1", status: "live" as const },
+      { dfsLineupId: "lineup-1", status: "upcoming" as const },
+    ];
+    expect(dfsExposureCount("event-1", dfsLineupSlots, dfsEntries)).toBe(2);
+  });
+
+  it("excludes slots on lineups whose only entries are final", () => {
+    const dfsLineupSlots = [{ eventId: "event-1", dfsLineupId: "lineup-done" }];
+    const dfsEntries = [{ dfsLineupId: "lineup-done", status: "final" as const }];
+    expect(dfsExposureCount("event-1", dfsLineupSlots, dfsEntries)).toBe(0);
+  });
+});
+
+describe("fantasyRootingSubjects", () => {
+  it("maps user-side slots to for and opponent-side slots to against", () => {
+    const subjects = fantasyRootingSubjects([
+      { participantId: "p-1", side: "user" },
+      { participantId: "p-2", side: "opponent" },
+      { participantId: null, side: "user" },
+    ]);
+    expect(subjects).toEqual([
+      { participantId: "p-1", direction: "for" },
+      { participantId: "p-2", direction: "against" },
+    ]);
+  });
+});
+
+describe("dfsRootingSubjects", () => {
+  it("is always for, and only for lineups with an active (upcoming/live) entry", () => {
+    const dfsLineupSlots = [
+      { participantId: "p-1", dfsLineupId: "lineup-active" },
+      { participantId: "p-2", dfsLineupId: "lineup-final" },
+      { participantId: null, dfsLineupId: "lineup-active" },
+    ];
+    const dfsEntries = [
+      { dfsLineupId: "lineup-active", status: "live" as const },
+      { dfsLineupId: "lineup-final", status: "final" as const },
+    ];
+    expect(dfsRootingSubjects(dfsLineupSlots, dfsEntries)).toEqual([{ participantId: "p-1", direction: "for" }]);
   });
 });

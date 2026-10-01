@@ -8,6 +8,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { toTeam, toParticipant, toEvent, toTicket, type TeamRow, type ParticipantRow, type EventRow, type TicketRow } from "@/lib/db/rows";
 import type { MatchCandidates } from "./match-parsed-legs";
+import type { PlayerSlotCandidates } from "./match-fantasy-dfs";
 import type { DuplicateTicketCandidate } from "./duplicate-check";
 
 export async function fetchMatchCandidates(supabase: SupabaseClient, userId: string): Promise<MatchCandidates> {
@@ -36,6 +37,27 @@ export async function fetchMatchCandidates(supabase: SupabaseClient, userId: str
       homeTeamId: e.homeTeamId,
       awayTeamId: e.awayTeamId,
     })),
+  };
+}
+
+/** Candidate Participants/Events for matching a DFS lineup slot's or fantasy starter's player name (docs/PRD.md section 30, 43). */
+export async function fetchPlayerSlotCandidates(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<PlayerSlotCandidates> {
+  const [participantsRes, eventsRes] = await Promise.all([
+    supabase.from("participants").select("*").eq("user_id", userId),
+    supabase.from("events").select("*").eq("user_id", userId),
+  ]);
+  if (participantsRes.error) throw participantsRes.error;
+  if (eventsRes.error) throw eventsRes.error;
+
+  const participants = ((participantsRes.data ?? []) as ParticipantRow[]).map(toParticipant);
+  const events = ((eventsRes.data ?? []) as EventRow[]).map(toEvent);
+
+  return {
+    participants: participants.map((p) => ({ id: p.id, sport: p.sport, name: p.name, teamId: p.teamId })),
+    events: events.map((e) => ({ id: e.id, homeTeamId: e.homeTeamId, awayTeamId: e.awayTeamId })),
   };
 }
 

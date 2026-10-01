@@ -1,9 +1,8 @@
 // Exposure counting (docs/PRD.md section 11.6) and Mixed Rooting Context
-// (docs/PRD.md section 17), betting-only for Phase 4 — the Fantasy/DFS
-// terms of the exposure formula don't apply until those domains exist
-// (Phase 5).
+// (docs/PRD.md section 17). Phase 5 adds the Fantasy/DFS terms of the
+// exposure formula and rooting sources alongside the Phase 4 betting ones.
 
-import type { LegSettlement, RootingDirection, TicketStatus } from "@/lib/types/domain";
+import type { DFSEntryStatus, LegSettlement, RootingDirection, RosterSlotSide, TicketStatus } from "@/lib/types/domain";
 
 /** A BetLegSubject is an "active exposure" only while its leg is open (docs/PRD.md section 17). */
 export function activeBetLegSubjects<S extends { betLegId: string }>(
@@ -65,4 +64,78 @@ export function eventExposureCount(
     const status = ticketStatusByLegId.get(bev.betLegId);
     return status === "pending" || status === "active";
   }).length;
+}
+
+/**
+ * DFSEntry statuses that count as "active" for exposure/rooting purposes
+ * (docs/PRD.md section 11.6, 17): upcoming or live, i.e. not yet final.
+ */
+function isActiveDfsEntryStatus(status: DFSEntryStatus): boolean {
+  return status === "upcoming" || status === "live";
+}
+
+/**
+ * Fantasy term of the Exposure Count formula (docs/PRD.md section 11.6):
+ * user-side + opponent-side FantasyRosterSlots linked to this Event. No
+ * status filter — unlike BetLegEvents/DFSLineupSlots there is no "active"
+ * qualifier on the FantasyRosterSlot term.
+ */
+export function fantasyExposureCount(
+  eventId: string,
+  fantasyRosterSlots: Array<{ eventId?: string | null }>,
+): number {
+  return fantasyRosterSlots.filter((s) => s.eventId === eventId).length;
+}
+
+/**
+ * DFS term of the Exposure Count formula (docs/PRD.md section 11.6):
+ * DFSLineupSlots linked to this Event, on lineups with an active
+ * (upcoming/live) entry. A DFSLineup counts once however many DFSEntries
+ * use it, because this counts LineupSlots (one per lineup), not Entries.
+ */
+export function dfsExposureCount(
+  eventId: string,
+  dfsLineupSlots: Array<{ eventId?: string | null; dfsLineupId: string }>,
+  dfsEntries: Array<{ dfsLineupId: string; status: DFSEntryStatus }>,
+): number {
+  const activeLineupIds = new Set(
+    dfsEntries.filter((e) => isActiveDfsEntryStatus(e.status)).map((e) => e.dfsLineupId),
+  );
+  return dfsLineupSlots.filter((s) => s.eventId === eventId && activeLineupIds.has(s.dfsLineupId)).length;
+}
+
+/**
+ * Fantasy rooting source (docs/PRD.md section 17): side "user" -> for,
+ * side "opponent" -> against. No status filter on the matchup.
+ */
+export function fantasyRootingSubjects(
+  fantasyRosterSlots: Array<{ participantId?: string | null; side: RosterSlotSide }>,
+): Array<{ participantId: string; direction: RootingDirection }> {
+  const result: Array<{ participantId: string; direction: RootingDirection }> = [];
+  for (const s of fantasyRosterSlots) {
+    if (!s.participantId) continue;
+    result.push({ participantId: s.participantId, direction: s.side === "user" ? "for" : "against" });
+  }
+  return result;
+}
+
+/**
+ * DFS rooting source (docs/PRD.md section 17): a DFSLineupSlot on a
+ * lineup with an entry that is upcoming or live is "for". DFS opponents
+ * are not tracked, so DFS exposure is always "for".
+ */
+export function dfsRootingSubjects(
+  dfsLineupSlots: Array<{ participantId?: string | null; dfsLineupId: string }>,
+  dfsEntries: Array<{ dfsLineupId: string; status: DFSEntryStatus }>,
+): Array<{ participantId: string; direction: RootingDirection }> {
+  const activeLineupIds = new Set(
+    dfsEntries.filter((e) => isActiveDfsEntryStatus(e.status)).map((e) => e.dfsLineupId),
+  );
+  const result: Array<{ participantId: string; direction: RootingDirection }> = [];
+  for (const s of dfsLineupSlots) {
+    if (!s.participantId) continue;
+    if (!activeLineupIds.has(s.dfsLineupId)) continue;
+    result.push({ participantId: s.participantId, direction: "for" });
+  }
+  return result;
 }

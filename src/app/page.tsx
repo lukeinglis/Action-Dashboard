@@ -3,9 +3,17 @@ import { getUserPreferences } from "@/lib/preferences/get-user-preferences";
 import { getOrCreateDefaultView, getWorkspaceState, listViews } from "@/lib/dashboard/views-db";
 import { resolveDateWindow } from "@/lib/dashboard/date-window";
 import { resolveLayoutOnRestore, resolveOpeningState } from "@/lib/dashboard/views";
-import { activeBetLegSubjects, computeRootingLabels, eventExposureCount } from "@/lib/dashboard/exposure";
+import {
+  activeBetLegSubjects,
+  computeRootingLabels,
+  dfsRootingSubjects,
+  eventExposureCount,
+  fantasyRootingSubjects,
+  type RootingLabel,
+} from "@/lib/dashboard/exposure";
 import { groupByState, isScheduleRailEligible } from "@/lib/dashboard/schedule";
 import { ticketSection } from "@/lib/dashboard/active-tickets";
+import { allLinkedEventsFinal, fantasyDfsSection } from "@/lib/dashboard/active-fantasy-dfs";
 import { buildWhatDoINeed, relevantWhatDoINeedEntries, type OpenLegForPane } from "@/lib/dashboard/what-do-i-need";
 import { isLegLive, nextEvent } from "@/lib/tickets/bet-leg-events";
 import { effectiveTicketStatus, legSettlement } from "@/lib/betting/derived-status";
@@ -14,21 +22,44 @@ import {
   toBetLeg,
   toBetLegEvent,
   toBetLegSubject,
+  toDFSEntry,
+  toDFSLineup,
+  toDFSLineupSlot,
   toEvent,
+  toFantasyLeague,
+  toFantasyMatchup,
+  toFantasyRosterSlot,
   toParticipant,
   toTeam,
   toTicket,
   type BetLegEventRow,
   type BetLegRow,
   type BetLegSubjectRow,
+  type DFSEntryRow,
+  type DFSLineupRow,
+  type DFSLineupSlotRow,
   type EventRow,
+  type FantasyLeagueRow,
+  type FantasyMatchupRow,
+  type FantasyRosterSlotRow,
   type ParticipantRow,
   type TeamRow,
   type TicketRow,
 } from "@/lib/db/rows";
 import type { LegSettlement, TicketStatus } from "@/lib/types/domain";
 import { Dashboard } from "./Dashboard";
-import type { DashboardTicketItem, EventDetailData, EventDetailLeg, EventDetailSubject, ScheduleEventItem, WhatDoINeedItem } from "./types";
+import type {
+  DashboardTicketItem,
+  DfsEntryPaneItem,
+  EventDetailData,
+  EventDetailDfsSlot,
+  EventDetailFantasySlot,
+  EventDetailLeg,
+  EventDetailSubject,
+  FantasyMatchupPaneItem,
+  ScheduleEventItem,
+  WhatDoINeedItem,
+} from "./types";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -50,24 +81,54 @@ export default async function Home() {
   const opening = resolveOpeningState(workspaceState, defaultView, now, timezone, rolloverHour);
   const dateWindow = resolveDateWindow(opening.filters.dateWindow, now, timezone, rolloverHour);
 
-  const [eventRes, ticketRes, legRes, teamRes, participantRes] = await Promise.all([
+  const [
+    eventRes,
+    ticketRes,
+    legRes,
+    teamRes,
+    participantRes,
+    fantasyLeagueRes,
+    fantasyMatchupRes,
+    fantasyRosterSlotRes,
+    dfsLineupRes,
+    dfsLineupSlotRes,
+    dfsEntryRes,
+  ] = await Promise.all([
     supabase.from("events").select("*"),
     supabase.from("tickets").select("*").order("sort_key", { ascending: true }),
     supabase.from("bet_legs").select("*"),
     supabase.from("teams").select("*"),
     supabase.from("participants").select("*"),
+    supabase.from("fantasy_leagues").select("*"),
+    supabase.from("fantasy_matchups").select("*").order("sort_key", { ascending: true }),
+    supabase.from("fantasy_roster_slots").select("*"),
+    supabase.from("dfs_lineups").select("*"),
+    supabase.from("dfs_lineup_slots").select("*"),
+    supabase.from("dfs_entries").select("*").order("sort_key", { ascending: true }),
   ]);
   if (eventRes.error) throw eventRes.error;
   if (ticketRes.error) throw ticketRes.error;
   if (legRes.error) throw legRes.error;
   if (teamRes.error) throw teamRes.error;
   if (participantRes.error) throw participantRes.error;
+  if (fantasyLeagueRes.error) throw fantasyLeagueRes.error;
+  if (fantasyMatchupRes.error) throw fantasyMatchupRes.error;
+  if (fantasyRosterSlotRes.error) throw fantasyRosterSlotRes.error;
+  if (dfsLineupRes.error) throw dfsLineupRes.error;
+  if (dfsLineupSlotRes.error) throw dfsLineupSlotRes.error;
+  if (dfsEntryRes.error) throw dfsEntryRes.error;
 
   const events = (eventRes.data ?? []).map((r) => toEvent(r as EventRow));
   const tickets = (ticketRes.data ?? []).map((r) => toTicket(r as TicketRow));
   const legs = (legRes.data ?? []).map((r) => toBetLeg(r as BetLegRow));
   const teams = (teamRes.data ?? []).map((r) => toTeam(r as TeamRow));
   const participants = (participantRes.data ?? []).map((r) => toParticipant(r as ParticipantRow));
+  const fantasyLeagues = (fantasyLeagueRes.data ?? []).map((r) => toFantasyLeague(r as FantasyLeagueRow));
+  const fantasyMatchups = (fantasyMatchupRes.data ?? []).map((r) => toFantasyMatchup(r as FantasyMatchupRow));
+  const fantasyRosterSlots = (fantasyRosterSlotRes.data ?? []).map((r) => toFantasyRosterSlot(r as FantasyRosterSlotRow));
+  const dfsLineups = (dfsLineupRes.data ?? []).map((r) => toDFSLineup(r as DFSLineupRow));
+  const dfsLineupSlots = (dfsLineupSlotRes.data ?? []).map((r) => toDFSLineupSlot(r as DFSLineupSlotRow));
+  const dfsEntries = (dfsEntryRes.data ?? []).map((r) => toDFSEntry(r as DFSEntryRow));
 
   const legIds = legs.map((l) => l.id);
 
@@ -90,6 +151,29 @@ export default async function Home() {
   const legById = new Map(legs.map((l) => [l.id, l]));
   const nameByParticipantId = new Map(participants.map((p) => [p.id, p.name]));
   const nameByTeamId = new Map(teams.map((t) => [t.id, t.name]));
+
+  // Phase 5: Fantasy and DFS lookup maps (docs/PRD.md sections 34-45).
+  const fantasyLeagueById = new Map(fantasyLeagues.map((l) => [l.id, l]));
+  const fantasyMatchupById = new Map(fantasyMatchups.map((m) => [m.id, m]));
+  const dfsLineupById = new Map(dfsLineups.map((l) => [l.id, l]));
+  const fantasyRosterSlotsByMatchupId = new Map<string, typeof fantasyRosterSlots>();
+  for (const slot of fantasyRosterSlots) {
+    const arr = fantasyRosterSlotsByMatchupId.get(slot.fantasyMatchupId) ?? [];
+    arr.push(slot);
+    fantasyRosterSlotsByMatchupId.set(slot.fantasyMatchupId, arr);
+  }
+  const dfsLineupSlotsByLineupId = new Map<string, typeof dfsLineupSlots>();
+  for (const slot of dfsLineupSlots) {
+    const arr = dfsLineupSlotsByLineupId.get(slot.dfsLineupId) ?? [];
+    arr.push(slot);
+    dfsLineupSlotsByLineupId.set(slot.dfsLineupId, arr);
+  }
+  const dfsEntriesByLineupId = new Map<string, typeof dfsEntries>();
+  for (const entry of dfsEntries) {
+    const arr = dfsEntriesByLineupId.get(entry.dfsLineupId) ?? [];
+    arr.push(entry);
+    dfsEntriesByLineupId.set(entry.dfsLineupId, arr);
+  }
 
   const legSettlementByLegId = new Map<string, LegSettlement>(legs.map((l) => [l.id, legSettlement(l)]));
 
@@ -120,9 +204,17 @@ export default async function Home() {
   );
   const ticketStatusByLegId = new Map<string, TicketStatus>(legs.map((l) => [l.id, ticketStatusById.get(l.ticketId)!]));
 
-  // Mixed Rooting Context (docs/PRD.md section 17): derived from active (open-leg) subjects only.
+  // Mixed Rooting Context (docs/PRD.md section 17): combines active (open-leg) betting
+  // subjects with Fantasy (user-side "for" / opponent-side "against") and DFS (always
+  // "for", active entries only) subjects for a true cross-domain rooting label.
   const activeSubjects = activeBetLegSubjects(subjects, legSettlementByLegId);
-  const rootingLabelByKey = computeRootingLabels(activeSubjects);
+  const fantasySubjects = fantasyRootingSubjects(fantasyRosterSlots);
+  const dfsSubjects = dfsRootingSubjects(dfsLineupSlots, dfsEntries);
+  const rootingLabelByKey = computeRootingLabels([
+    ...activeSubjects,
+    ...fantasySubjects,
+    ...dfsSubjects,
+  ]);
 
   function subjectName(s: { participantId?: string | null; teamId?: string | null }): string {
     if (s.participantId) return nameByParticipantId.get(s.participantId) ?? "Unknown player";
@@ -201,6 +293,47 @@ export default async function Home() {
     ];
   });
 
+  // Event Detail: MY FANTASY / FANTASY OPPONENTS / DFS sections (docs/PRD.md
+  // sections 34-45, 65), keyed by linked Event.
+  function rootingLabelForParticipant(participantId: string | null | undefined): RootingLabel {
+    if (!participantId) return "NEUTRAL";
+    return rootingLabelByKey.get(`participant:${participantId}`) ?? "NEUTRAL";
+  }
+
+  const fantasySlotsByEventId = new Map<string, EventDetailFantasySlot[]>();
+  for (const slot of fantasyRosterSlots) {
+    if (!slot.eventId) continue;
+    const matchup = fantasyMatchupById.get(slot.fantasyMatchupId);
+    const league = matchup ? fantasyLeagueById.get(matchup.fantasyLeagueId) : undefined;
+    const arr = fantasySlotsByEventId.get(slot.eventId) ?? [];
+    arr.push({
+      slotId: slot.id,
+      matchupId: slot.fantasyMatchupId,
+      leagueName: league?.name ?? "Fantasy League",
+      side: slot.side,
+      slot: slot.slot,
+      playerName: slot.playerName,
+      label: rootingLabelForParticipant(slot.participantId),
+    });
+    fantasySlotsByEventId.set(slot.eventId, arr);
+  }
+
+  const dfsSlotsByEventId = new Map<string, EventDetailDfsSlot[]>();
+  for (const slot of dfsLineupSlots) {
+    if (!slot.eventId) continue;
+    const lineup = dfsLineupById.get(slot.dfsLineupId);
+    const arr = dfsSlotsByEventId.get(slot.eventId) ?? [];
+    arr.push({
+      slotId: slot.id,
+      lineupId: slot.dfsLineupId,
+      platform: lineup?.platform ?? "DFS",
+      slot: slot.slot,
+      playerName: slot.playerName,
+      label: rootingLabelForParticipant(slot.participantId),
+    });
+    dfsSlotsByEventId.set(slot.eventId, arr);
+  }
+
   // Event Detail workspace data, computed for every Schedule Rail-eligible Event.
   const eventDetailByEventId = new Map<string, EventDetailData>();
   for (const scheduleEvent of scheduleEvents) {
@@ -233,7 +366,12 @@ export default async function Home() {
         subjects: legSubjects,
       };
     });
-    eventDetailByEventId.set(event.id, { event: scheduleEvent, legs: detailLegs });
+    eventDetailByEventId.set(event.id, {
+      event: scheduleEvent,
+      legs: detailLegs,
+      fantasySlots: fantasySlotsByEventId.get(event.id) ?? [],
+      dfsSlots: dfsSlotsByEventId.get(event.id) ?? [],
+    });
   }
 
   // What Do I Need? pane (docs/PRD.md section 16): active Betting need legs, grouped LIVE/UP NEXT.
@@ -263,6 +401,51 @@ export default async function Home() {
     subjects: e.subjects,
   }));
 
+  // Fantasy / DFS context panes (docs/PRD.md section 8, 65): active matchups/entries
+  // only, with the "Mark Final" prompt shown once every linked Event has gone final.
+  // Status itself never changes automatically — only the prompt is derived here.
+  const fantasyMatchupPaneItems: FantasyMatchupPaneItem[] = fantasyMatchups.flatMap((matchup) => {
+    const section = fantasyDfsSection(matchup.status, matchup.finalizedAt, now, timezone, rolloverHour);
+    if (section !== "active") return [];
+    const league = fantasyLeagueById.get(matchup.fantasyLeagueId);
+    const linkedEventStatuses = (fantasyRosterSlotsByMatchupId.get(matchup.id) ?? []).map((slot) => {
+      const e = slot.eventId ? eventById.get(slot.eventId) : undefined;
+      return e ? displayedStatus(e) : null;
+    });
+    return [
+      {
+        matchupId: matchup.id,
+        leagueName: league?.name ?? "Fantasy League",
+        week: matchup.week ?? null,
+        userTeamName: matchup.userTeamName,
+        opponentTeamName: matchup.opponentTeamName,
+        status: matchup.status,
+        showMarkFinal: allLinkedEventsFinal(linkedEventStatuses),
+      },
+    ];
+  });
+
+  const dfsEntryPaneItems: DfsEntryPaneItem[] = dfsEntries.flatMap((entry) => {
+    const section = fantasyDfsSection(entry.status, entry.finalizedAt, now, timezone, rolloverHour);
+    if (section !== "active") return [];
+    const lineup = dfsLineupById.get(entry.dfsLineupId);
+    const linkedEventStatuses = (dfsLineupSlotsByLineupId.get(entry.dfsLineupId) ?? []).map((slot) => {
+      const e = slot.eventId ? eventById.get(slot.eventId) : undefined;
+      return e ? displayedStatus(e) : null;
+    });
+    return [
+      {
+        entryId: entry.id,
+        lineupId: entry.dfsLineupId,
+        platform: lineup?.platform ?? "DFS",
+        slateName: lineup?.slateName ?? null,
+        contestName: entry.contestName ?? null,
+        status: entry.status,
+        showMarkFinal: allLinkedEventsFinal(linkedEventStatuses),
+      },
+    ];
+  });
+
   return (
     <Dashboard
       baseViewId={opening.baseViewId ?? null}
@@ -273,6 +456,8 @@ export default async function Home() {
       ticketItems={ticketItems}
       eventDetailByEventId={Object.fromEntries(eventDetailByEventId)}
       whatDoINeed={whatDoINeed}
+      fantasyMatchups={fantasyMatchupPaneItems}
+      dfsEntries={dfsEntryPaneItems}
       timeZone={timezone}
     />
   );

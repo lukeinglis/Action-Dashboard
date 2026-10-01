@@ -1,10 +1,42 @@
 "use client";
 
 import Link from "next/link";
-import type { EventDetailData } from "./types";
+import type { EventDetailData, EventDetailDfsSlot, EventDetailFantasySlot } from "./types";
+
+function rosterSlotBadgeClass(label: string): string {
+  return label === "MIXED" ? "bg-amber-900/40 text-amber-300" : "bg-neutral-800 text-neutral-300";
+}
+
+function FantasySlotRow({ slot }: { slot: EventDetailFantasySlot }) {
+  return (
+    <div className="flex items-center justify-between rounded border border-neutral-800 p-2 text-sm">
+      <span className="text-neutral-200">
+        <span className="text-xs text-neutral-500">{slot.slot}</span> {slot.playerName}
+      </span>
+      <span className={`rounded px-1.5 py-0 text-[10px] ${rosterSlotBadgeClass(slot.label)}`}>
+        {slot.leagueName} · {slot.label}
+      </span>
+    </div>
+  );
+}
+
+function DfsSlotRow({ slot }: { slot: EventDetailDfsSlot }) {
+  return (
+    <div className="flex items-center justify-between rounded border border-neutral-800 p-2 text-sm">
+      <span className="text-neutral-200">
+        <span className="text-xs text-neutral-500">{slot.slot}</span> {slot.playerName}
+      </span>
+      <span className={`rounded px-1.5 py-0 text-[10px] ${rosterSlotBadgeClass(slot.label)}`}>
+        {slot.platform} · {slot.label}
+      </span>
+    </div>
+  );
+}
 
 export function EventDetail({ data }: { data: EventDetailData }) {
-  const { event, legs } = data;
+  const { event, legs, fantasySlots, dfsSlots } = data;
+  const myFantasySlots = fantasySlots.filter((s) => s.side === "user");
+  const opponentFantasySlots = fantasySlots.filter((s) => s.side === "opponent");
 
   return (
     <div className="space-y-4">
@@ -66,6 +98,41 @@ export function EventDetail({ data }: { data: EventDetailData }) {
           ))}
         </div>
       </div>
+
+      {myFantasySlots.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-neutral-100">My Fantasy ({myFantasySlots.length})</h3>
+          <div className="space-y-2">
+            {myFantasySlots.map((slot) => (
+              <FantasySlotRow key={slot.slotId} slot={slot} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {opponentFantasySlots.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-neutral-100">
+            Fantasy Opponents ({opponentFantasySlots.length})
+          </h3>
+          <div className="space-y-2">
+            {opponentFantasySlots.map((slot) => (
+              <FantasySlotRow key={slot.slotId} slot={slot} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {dfsSlots.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-neutral-100">DFS ({dfsSlots.length})</h3>
+          <div className="space-y-2">
+            {dfsSlots.map((slot) => (
+              <DfsSlotRow key={slot.slotId} slot={slot} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

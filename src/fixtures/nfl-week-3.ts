@@ -23,7 +23,13 @@ import type {
   BetLeg,
   BetLegEvent,
   BetLegSubject,
+  DFSEntry,
+  DFSLineup,
+  DFSLineupSlot,
   Event,
+  FantasyLeague,
+  FantasyMatchup,
+  FantasyRosterSlot,
   Participant,
   Team,
   Ticket,
@@ -534,3 +540,346 @@ Wager: $10.00
 To Win: $45.00
 Payout: $55.00
 Placed: 2026-09-19T12:03:00Z`;
+
+// Phase 5 slice (docs/PRD.md section 64.1): fantasy matchups, a DFS lineup
+// used in 3 entries, and the fantasy-matchup / DFS-lineup "screenshot" text
+// (pasted text standing in for a transcribed screenshot, same rationale as
+// the Phase 3 importSlipText* fixtures above). Reuses this file's existing
+// Teams/Participants/Events so Fantasy/DFS exposure and rooting combine
+// with the betting fixture above (docs/PRD.md section 17: Mixed Rooting
+// Context spans all three domains).
+//
+// Exercises:
+//   - one FantasyLeague with two FantasyMatchups: fantasy-matchup-1 has a
+//     still-live linked Event (not all linked Events final -> no Mark
+//     Final prompt); fantasy-matchup-2's only linked Event is already
+//     final (all linked Events final -> Mark Final prompt appears).
+//   - one DFSLineup (dfs-lineup-1) used in 3 DFSEntries with different
+//     statuses (upcoming, live, final) -> the lineup's exposure counts
+//     once per linked Event regardless of entry count, and a still-live
+//     linked Event means none of its entries show Mark Final.
+//   - a second DFSLineup (dfs-lineup-2) with a single entry whose only
+//     linked Event is already final -> Mark Final prompt appears.
+
+function fantasyLeague(input: {
+  id: string;
+  name: string;
+  platform?: string | null;
+  season: string;
+  userTeamName?: string | null;
+}): FantasyLeague {
+  return {
+    id: input.id,
+    userId: USER_ID,
+    name: input.name,
+    platform: input.platform ?? null,
+    sport: "football",
+    season: input.season,
+    userTeamName: input.userTeamName ?? null,
+    createdAt: T0,
+    updatedAt: T0,
+  };
+}
+
+export const fantasyLeagues: FantasyLeague[] = [
+  fantasyLeague({ id: "fantasy-league-1", name: "Friends League", platform: "ESPN", season: "2026", userTeamName: "Dynasty Crew" }),
+];
+
+function fantasyMatchup(input: {
+  id: string;
+  fantasyLeagueId: string;
+  week?: number | null;
+  userTeamName: string;
+  opponentTeamName: string;
+  sortKey: string;
+}): FantasyMatchup {
+  return {
+    id: input.id,
+    userId: USER_ID,
+    fantasyLeagueId: input.fantasyLeagueId,
+    week: input.week ?? null,
+    userTeamName: input.userTeamName,
+    opponentTeamName: input.opponentTeamName,
+    automaticUserScore: null,
+    automaticOpponentScore: null,
+    manualUserScore: null,
+    manualOpponentScore: null,
+    userProjectedScore: null,
+    opponentProjectedScore: null,
+    automaticChangedAt: null,
+    manualSetAt: null,
+    status: "upcoming",
+    finalizedAt: null,
+    sortKey: input.sortKey,
+    importRecordId: null,
+    createdAt: T0,
+    updatedAt: T0,
+  };
+}
+
+export const fantasyMatchups: FantasyMatchup[] = [
+  // Starters link to both the final Hawks @ Wolves Event and the still-live
+  // Comets @ Miners Event -> not every linked Event is final yet.
+  fantasyMatchup({
+    id: "fantasy-matchup-1",
+    fantasyLeagueId: "fantasy-league-1",
+    week: 3,
+    userTeamName: "Dynasty Crew",
+    opponentTeamName: "Rival Squad",
+    sortKey: "a",
+  }),
+  // Both sides' only linked Event (Hawks @ Wolves) is already final.
+  fantasyMatchup({
+    id: "fantasy-matchup-2",
+    fantasyLeagueId: "fantasy-league-1",
+    week: 2,
+    userTeamName: "Dynasty Crew",
+    opponentTeamName: "Early Finishers",
+    sortKey: "b",
+  }),
+];
+
+function fantasyRosterSlot(input: {
+  id: string;
+  fantasyMatchupId: string;
+  side: FantasyRosterSlot["side"];
+  slot: string;
+  participantId: string;
+  playerName: string;
+  eventId?: string | null;
+}): FantasyRosterSlot {
+  return {
+    id: input.id,
+    userId: USER_ID,
+    fantasyMatchupId: input.fantasyMatchupId,
+    side: input.side,
+    slot: input.slot,
+    participantId: input.participantId,
+    participantMatchMethod: "auto",
+    playerName: input.playerName,
+    projectedPoints: null,
+    automaticActualPoints: null,
+    manualActualPoints: null,
+    automaticChangedAt: null,
+    manualSetAt: null,
+    eventId: input.eventId ?? null,
+    eventMatchMethod: input.eventId ? "auto" : null,
+    createdAt: T0,
+    updatedAt: T0,
+  };
+}
+
+export const fantasyRosterSlots: FantasyRosterSlot[] = [
+  // fantasy-matchup-1: user side has one starter on each of the final and
+  // the still-live Event.
+  fantasyRosterSlot({
+    id: "frs-1-sparks",
+    fantasyMatchupId: "fantasy-matchup-1",
+    side: "user",
+    slot: "QB",
+    participantId: "participant-sparks",
+    playerName: "T. Sparks",
+    eventId: "event-hawks-wolves",
+  }),
+  fantasyRosterSlot({
+    id: "frs-1-egbuka",
+    fantasyMatchupId: "fantasy-matchup-1",
+    side: "user",
+    slot: "WR",
+    participantId: "participant-egbuka",
+    playerName: "D. Egbuka",
+    eventId: "event-comets-miners",
+  }),
+  fantasyRosterSlot({
+    id: "frs-1-reyes",
+    fantasyMatchupId: "fantasy-matchup-1",
+    side: "opponent",
+    slot: "RB",
+    participantId: "participant-reyes",
+    playerName: "M. Reyes",
+    eventId: "event-hawks-wolves",
+  }),
+  // fantasy-matchup-2: both sides' only linked Event is already final.
+  fantasyRosterSlot({
+    id: "frs-2-sparks",
+    fantasyMatchupId: "fantasy-matchup-2",
+    side: "user",
+    slot: "QB",
+    participantId: "participant-sparks",
+    playerName: "T. Sparks",
+    eventId: "event-hawks-wolves",
+  }),
+  fantasyRosterSlot({
+    id: "frs-2-reyes",
+    fantasyMatchupId: "fantasy-matchup-2",
+    side: "opponent",
+    slot: "RB",
+    participantId: "participant-reyes",
+    playerName: "M. Reyes",
+    eventId: "event-hawks-wolves",
+  }),
+];
+
+function dfsLineup(input: { id: string; platform: string; slateName?: string | null }): DFSLineup {
+  return {
+    id: input.id,
+    userId: USER_ID,
+    platform: input.platform,
+    sport: "football",
+    slateName: input.slateName ?? null,
+    importRecordId: null,
+    createdAt: T0,
+    updatedAt: T0,
+  };
+}
+
+export const dfsLineups: DFSLineup[] = [
+  dfsLineup({ id: "dfs-lineup-1", platform: "DraftKings", slateName: "Sunday Main" }),
+  dfsLineup({ id: "dfs-lineup-2", platform: "FanDuel", slateName: "Showdown" }),
+];
+
+function dfsLineupSlot(input: {
+  id: string;
+  dfsLineupId: string;
+  slot: string;
+  participantId: string;
+  playerName: string;
+  salary?: number | null;
+  eventId?: string | null;
+}): DFSLineupSlot {
+  return {
+    id: input.id,
+    userId: USER_ID,
+    dfsLineupId: input.dfsLineupId,
+    slot: input.slot,
+    participantId: input.participantId,
+    participantMatchMethod: "auto",
+    playerName: input.playerName,
+    salary: input.salary ?? null,
+    automaticActualPoints: null,
+    manualActualPoints: null,
+    automaticChangedAt: null,
+    manualSetAt: null,
+    eventId: input.eventId ?? null,
+    eventMatchMethod: input.eventId ? "auto" : null,
+    createdAt: T0,
+    updatedAt: T0,
+  };
+}
+
+export const dfsLineupSlots: DFSLineupSlot[] = [
+  // dfs-lineup-1: one slot on the still-live Comets @ Miners Event, so none
+  // of this lineup's entries have every linked Event final yet.
+  dfsLineupSlot({
+    id: "dls-1-sparks",
+    dfsLineupId: "dfs-lineup-1",
+    slot: "QB",
+    participantId: "participant-sparks",
+    playerName: "T. Sparks",
+    salary: 7500,
+    eventId: "event-hawks-wolves",
+  }),
+  dfsLineupSlot({
+    id: "dls-1-egbuka",
+    dfsLineupId: "dfs-lineup-1",
+    slot: "WR",
+    participantId: "participant-egbuka",
+    playerName: "D. Egbuka",
+    salary: 6200,
+    eventId: "event-comets-miners",
+  }),
+  dfsLineupSlot({
+    id: "dls-1-reyes",
+    dfsLineupId: "dfs-lineup-1",
+    slot: "FLEX",
+    participantId: "participant-reyes",
+    playerName: "M. Reyes",
+    salary: 5400,
+    eventId: "event-hawks-wolves",
+  }),
+  // dfs-lineup-2: single slot, only linked Event is already final.
+  dfsLineupSlot({
+    id: "dls-2-reyes",
+    dfsLineupId: "dfs-lineup-2",
+    slot: "QB",
+    participantId: "participant-reyes",
+    playerName: "M. Reyes",
+    salary: 8200,
+    eventId: "event-hawks-wolves",
+  }),
+];
+
+function dfsEntry(input: {
+  id: string;
+  dfsLineupId: string;
+  contestName?: string | null;
+  status: DFSEntry["status"];
+  finalizedAt?: string | null;
+  sortKey: string;
+}): DFSEntry {
+  return {
+    id: input.id,
+    userId: USER_ID,
+    dfsLineupId: input.dfsLineupId,
+    contestName: input.contestName ?? null,
+    entryFeeCents: 2000,
+    potentialPrizeCents: 50000,
+    automaticCurrentPoints: null,
+    manualCurrentPoints: null,
+    automaticChangedAt: null,
+    manualSetAt: null,
+    status: input.status,
+    finalizedAt: input.finalizedAt ?? null,
+    sortKey: input.sortKey,
+    createdAt: T0,
+    updatedAt: T0,
+  };
+}
+
+export const dfsEntries: DFSEntry[] = [
+  // dfs-lineup-1 used in 3 entries (docs/PRD.md section 64.1) -- exposure
+  // must count the lineup's slots once per Event, not three times.
+  dfsEntry({ id: "dfs-entry-1", dfsLineupId: "dfs-lineup-1", contestName: "Main Slate GPP", status: "upcoming", sortKey: "a" }),
+  dfsEntry({ id: "dfs-entry-2", dfsLineupId: "dfs-lineup-1", contestName: "Double Up", status: "live", sortKey: "b" }),
+  dfsEntry({
+    id: "dfs-entry-3",
+    dfsLineupId: "dfs-lineup-1",
+    contestName: "Satellite",
+    status: "final",
+    finalizedAt: "2026-09-18T00:00:00.000Z",
+    sortKey: "c",
+  }),
+  // dfs-lineup-2: a single entry whose lineup's only linked Event is final.
+  dfsEntry({ id: "dfs-entry-4", dfsLineupId: "dfs-lineup-2", contestName: "Showdown GPP", status: "upcoming", sortKey: "d" }),
+];
+
+/** "Fantasy Matchup" screenshot/paste text (docs/PRD.md section 64.1) matching fantasy-matchup-1 above. */
+export const importFantasyMatchupText = `Fantasy Matchup
+League: Friends League
+Platform: ESPN
+Sport: football/NFL
+Season: 2026
+Week: 3
+My Team: Dynasty Crew
+Opponent: Rival Squad
+Starter: T. Sparks
+Starter: D. Egbuka
+Opponent Starter: M. Reyes`;
+
+/** "DFS Lineup" screenshot/paste text (docs/PRD.md section 64.1) matching dfs-lineup-1 above. */
+export const importDfsLineupText = `DFS Lineup
+Platform: DraftKings
+Sport: football/NFL
+Slate: Sunday Main
+Slot: QB
+Player: T. Sparks
+Salary: 7500
+Slot: WR
+Player: D. Egbuka
+Salary: 6200
+Slot: FLEX
+Player: M. Reyes
+Salary: 5400
+Contest: Main Slate GPP
+Entry Fee: $20.00
+Prize: $500.00`;

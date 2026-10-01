@@ -7,10 +7,19 @@ import { logout } from "@/app/login/actions";
 import { persistWorkingState, saveAsNewView, saveView } from "./actions";
 import { deepEqual } from "@/lib/dashboard/views";
 import type { DashboardView, DashboardViewFilters, DashboardViewLayout, SortMode } from "@/lib/types/domain";
-import type { DashboardTicketItem, EventDetailData, ScheduleEventItem, WhatDoINeedItem } from "./types";
+import type {
+  DashboardTicketItem,
+  DfsEntryPaneItem,
+  EventDetailData,
+  FantasyMatchupPaneItem,
+  ScheduleEventItem,
+  WhatDoINeedItem,
+} from "./types";
 import { ScheduleRail } from "./ScheduleRail";
 import { MainWorkspace } from "./MainWorkspace";
 import { WhatDoINeedPane } from "./WhatDoINeedPane";
+import { FantasyPane } from "./FantasyPane";
+import { DFSPane } from "./DFSPane";
 import { ViewSwitcher } from "./ViewSwitcher";
 
 interface Props {
@@ -22,6 +31,8 @@ interface Props {
   ticketItems: DashboardTicketItem[];
   eventDetailByEventId: Record<string, EventDetailData>;
   whatDoINeed: WhatDoINeedItem[];
+  fantasyMatchups: FantasyMatchupPaneItem[];
+  dfsEntries: DfsEntryPaneItem[];
   timeZone: string;
 }
 
@@ -56,8 +67,8 @@ export function Dashboard(props: Props) {
     updateLayout({ sortMode: mode });
   }
 
-  function toggleWhatDoINeed() {
-    updateLayout({ openPane: layout.openPane === "what_do_i_need" ? undefined : "what_do_i_need" });
+  function togglePane(pane: "what_do_i_need" | "fantasy" | "dfs") {
+    updateLayout({ openPane: layout.openPane === pane ? undefined : pane });
   }
 
   function setScheduleGrouping(grouping: DashboardViewLayout["scheduleGrouping"]) {
@@ -109,7 +120,7 @@ export function Dashboard(props: Props) {
     [layout.selectedEventId, props.eventDetailByEventId],
   );
 
-  const paneOpen = layout.openPane === "what_do_i_need";
+  const openPane = layout.openPane;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -138,10 +149,24 @@ export function Dashboard(props: Props) {
           </Link>
           <button
             type="button"
-            onClick={toggleWhatDoINeed}
-            className={`underline ${paneOpen ? "text-neutral-100" : "text-neutral-300"}`}
+            onClick={() => togglePane("what_do_i_need")}
+            className={`underline ${openPane === "what_do_i_need" ? "text-neutral-100" : "text-neutral-300"}`}
           >
             What Do I Need?
+          </button>
+          <button
+            type="button"
+            onClick={() => togglePane("fantasy")}
+            className={`underline ${openPane === "fantasy" ? "text-neutral-100" : "text-neutral-300"}`}
+          >
+            Fantasy
+          </button>
+          <button
+            type="button"
+            onClick={() => togglePane("dfs")}
+            className={`underline ${openPane === "dfs" ? "text-neutral-100" : "text-neutral-300"}`}
+          >
+            DFS
           </button>
           <form action={logout}>
             <button type="submit" className="text-neutral-500 underline">
@@ -170,7 +195,9 @@ export function Dashboard(props: Props) {
           onBackToTickets={() => selectEvent(null)}
         />
 
-        {paneOpen && <WhatDoINeedPane entries={props.whatDoINeed} />}
+        {openPane === "what_do_i_need" && <WhatDoINeedPane entries={props.whatDoINeed} />}
+        {openPane === "fantasy" && <FantasyPane items={props.fantasyMatchups} />}
+        {openPane === "dfs" && <DFSPane items={props.dfsEntries} />}
       </div>
     </div>
   );
