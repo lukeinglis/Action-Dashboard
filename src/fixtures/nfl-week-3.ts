@@ -15,6 +15,9 @@
 //     (subj-b1-hawks, overridden from the "against" default to "neutral")
 //   - every docs/PRD.md section 27 derived-status branch (lost, void, won,
 //     active via a settled leg, active via a live linked Event, pending)
+//   - a Phase 4 docs/PRD.md section 17 MIXED rooting scenario: a player
+//     (Egbuka) with one open "for" leg and one open "against" leg, both
+//     linked to the live Comets @ Miners Event (ticket-h)
 
 import type {
   BetLeg,
@@ -69,6 +72,7 @@ function participant(id: string, name: string, teamId: string): Participant {
 export const participants: Participant[] = [
   participant("participant-sparks", "T. Sparks", "team-hawks"),
   participant("participant-reyes", "M. Reyes", "team-wolves"),
+  participant("participant-egbuka", "D. Egbuka", "team-comets"),
 ];
 
 function event(input: {
@@ -80,6 +84,7 @@ function event(input: {
   automaticStatus: Event["automaticStatus"];
   automaticHomeScore?: number | null;
   automaticAwayScore?: number | null;
+  automaticChangedAt?: string;
 }): Event {
   return {
     id: input.id,
@@ -98,7 +103,7 @@ function event(input: {
     automaticAwayScore: input.automaticAwayScore ?? null,
     automaticPeriod: null,
     automaticClock: null,
-    automaticChangedAt: T0,
+    automaticChangedAt: input.automaticChangedAt ?? T0,
     manualStatus: null,
     manualHomeScore: null,
     manualAwayScore: null,
@@ -124,6 +129,9 @@ export const events: Event[] = [
     automaticStatus: "final",
     automaticHomeScore: 20,
     automaticAwayScore: 27,
+    // Went final ~3 hours after kickoff, same day -- used by the Phase 4
+    // Schedule Rail "went final today" eligibility rule.
+    automaticChangedAt: "2026-09-20T20:00:00.000Z",
   }),
   event({
     id: "event-comets-miners",
@@ -258,6 +266,26 @@ export const betLegs: BetLeg[] = [
     rawDescription: "Combined sacks: Hawks/Wolves + Comets/Miners",
     automaticStatus: null,
   }),
+  // ticket-h: two open legs on the same live-linked player, one "for" one
+  // "against" -> MIXED rooting context (docs/PRD.md section 17).
+  leg({
+    id: "leg-h1",
+    ticketId: "ticket-h",
+    marketType: "player_over_under",
+    selection: "D. Egbuka Over 5.5 Receptions",
+    line: 5.5,
+    oddsAmerican: -120,
+    automaticStatus: null,
+  }),
+  leg({
+    id: "leg-h2",
+    ticketId: "ticket-h",
+    marketType: "player_over_under",
+    selection: "D. Egbuka Under 65.5 Receiving Yards",
+    line: 65.5,
+    oddsAmerican: -110,
+    automaticStatus: null,
+  }),
 ];
 
 export const betLegEvents: BetLegEvent[] = [
@@ -270,6 +298,8 @@ export const betLegEvents: BetLegEvent[] = [
   // unlinked to any Event.
   { id: "bev-g1a", userId: USER_ID, betLegId: "leg-g1", eventId: "event-hawks-wolves", matchMethod: "auto", createdAt: T0 },
   { id: "bev-g1b", userId: USER_ID, betLegId: "leg-g1", eventId: "event-comets-miners", matchMethod: "auto", createdAt: T0 },
+  { id: "bev-h1", userId: USER_ID, betLegId: "leg-h1", eventId: "event-comets-miners", matchMethod: "auto", createdAt: T0 },
+  { id: "bev-h2", userId: USER_ID, betLegId: "leg-h2", eventId: "event-comets-miners", matchMethod: "auto", createdAt: T0 },
 ];
 
 function subject(input: {
@@ -333,6 +363,11 @@ export const betLegSubjects: BetLegSubject[] = [
 
   // custom (neutral category): subjects stay neutral until set by hand.
   subject({ id: "subj-g1-hawks", betLegId: "leg-g1", teamId: "team-hawks", direction: "neutral", directionSource: "auto" }),
+
+  // player_over_under (Over then Under on the same player, both open): for
+  // then against -> MIXED (docs/PRD.md section 17).
+  subject({ id: "subj-h1-egbuka", betLegId: "leg-h1", participantId: "participant-egbuka", direction: "for", directionSource: "auto" }),
+  subject({ id: "subj-h2-egbuka", betLegId: "leg-h2", participantId: "participant-egbuka", direction: "against", directionSource: "auto" }),
 ];
 
 function ticket(input: {
@@ -377,6 +412,7 @@ export const tickets: Ticket[] = [
   ticket({ id: "ticket-e", name: "Parlay In Progress", sortKey: "e", stakeCents: 1000, toWinCents: 3500, totalReturnCents: 4500 }),
   ticket({ id: "ticket-f", name: "Season Future", sortKey: "f", stakeCents: 500, toWinCents: 2250, totalReturnCents: 2750 }),
   ticket({ id: "ticket-g", name: "Multi-Game Combo", sortKey: "g", stakeCents: 1000, toWinCents: 800, totalReturnCents: 1800 }),
+  ticket({ id: "ticket-h", name: "Egbuka Over/Under Hedge", sortKey: "h", stakeCents: 2000, toWinCents: 1800, totalReturnCents: 3800 }),
 ];
 
 /** Expected docs/PRD.md section 27 derived status for each Ticket above, ignoring manualStatus. */
@@ -388,6 +424,7 @@ export const expectedTicketStatuses: Record<string, TicketStatus> = {
   "ticket-e": "active",
   "ticket-f": "pending",
   "ticket-g": "active",
+  "ticket-h": "active",
 };
 
 // Phase 3 slice (docs/PRD.md section 64.1): DraftKings "Bet Slip" text for

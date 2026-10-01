@@ -249,3 +249,61 @@ export interface ImportRecord {
   createdAt: string;
   approvedAt?: string | null;
 }
+
+// 46. Saved View model.
+export type DateWindow =
+  | { kind: "today" }
+  | { kind: "rolling"; pastHours: number; futureHours: number }
+  | { kind: "nfl_week" }
+  | { kind: "absolute"; start: string; end: string };
+
+export type SortMode = "manual" | "next_event" | "stake" | "to_win" | "legs_remaining";
+
+export type DashboardSection = "active" | "settled" | "final";
+export type DashboardDomain = "betting" | "fantasy" | "dfs";
+export type ScheduleGrouping = "state" | "nfl_window" | "chronological";
+export type ActiveWorkspace = "tickets" | "event";
+
+export interface DashboardViewFilters {
+  domains?: DashboardDomain[];
+  sports?: string[];
+  leagues?: string[];
+  tags?: string[];
+  dateWindow: DateWindow;
+  includePinned: boolean;
+}
+
+export interface DashboardViewLayout {
+  sortMode: SortMode;
+  visibleSections: DashboardSection[];
+  collapsedIds?: string[];
+  density: "comfortable" | "compact";
+  activeWorkspace: ActiveWorkspace;
+  selectedEventId?: string;
+  openPane?: string;
+  scheduleGrouping: ScheduleGrouping;
+}
+
+export interface DashboardView {
+  id: string;
+  userId: string;
+  name: string;
+  isDefault: boolean;
+
+  filters: DashboardViewFilters;
+  layout: DashboardViewLayout;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 46.1 Working state.
+export interface WorkspaceState {
+  userId: string;
+  baseViewId?: string | null;
+
+  filters: DashboardViewFilters;
+  layout: DashboardViewLayout;
+
+  updatedAt: string;
+}
