@@ -5,6 +5,9 @@ import type {
   BetLeg,
   BetLegEvent,
   BetLegSubject,
+  DashboardView,
+  DashboardViewFilters,
+  DashboardViewLayout,
   Event,
   EventSource,
   EventStatus,
@@ -23,6 +26,7 @@ import type {
   Ticket,
   TicketStatus,
   UserPreferences,
+  WorkspaceState,
 } from "@/lib/types/domain";
 
 export interface UserPreferencesRow {
@@ -366,5 +370,47 @@ export function toImportRecord(row: ImportRecordRow): ImportRecord {
     parseError: row.parse_error,
     createdAt: row.created_at,
     approvedAt: row.approved_at,
+  };
+}
+
+export interface DashboardViewRow {
+  id: string;
+  user_id: string;
+  name: string;
+  is_default: boolean;
+  filters: DashboardViewFilters;
+  layout: DashboardViewLayout;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkspaceStateRow {
+  user_id: string;
+  base_view_id: string | null;
+  filters: DashboardViewFilters;
+  layout: DashboardViewLayout;
+  updated_at: string;
+}
+
+export function toDashboardView(row: DashboardViewRow): DashboardView {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    isDefault: row.is_default,
+    filters: row.filters,
+    layout: row.layout,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toWorkspaceState(row: WorkspaceStateRow): WorkspaceState {
+  return {
+    userId: row.user_id,
+    baseViewId: row.base_view_id,
+    filters: row.filters,
+    layout: row.layout,
+    updatedAt: row.updated_at,
   };
 }
