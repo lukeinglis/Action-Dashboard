@@ -91,7 +91,15 @@ function AllActiveTickets({
         </select>
       </div>
 
-      {sortedActive.length === 0 && <p className="text-sm text-neutral-500">No active tickets.</p>}
+      {sortedActive.length === 0 && (
+        <p className="text-sm text-neutral-500">
+          No active tickets.{" "}
+          <Link href="/inbox" className="text-neutral-300 underline">
+            Add a pick
+          </Link>{" "}
+          to get started.
+        </p>
+      )}
 
       {sortMode === "manual" ? (
         <TicketList items={active} />

@@ -137,15 +137,18 @@ export function Dashboard(props: Props) {
             onRevert={revert}
           />
         </div>
-        <nav className="flex gap-3 text-sm">
+        <nav className="flex items-center gap-3 text-sm">
+          <Link
+            href="/inbox"
+            className="rounded bg-neutral-100 px-3 py-1.5 font-medium text-neutral-900 hover:bg-white"
+          >
+            + Add Pick
+          </Link>
           <Link href="/events" className="text-neutral-300 underline">
             Events
           </Link>
           <Link href="/tickets" className="text-neutral-300 underline">
             Tickets
-          </Link>
-          <Link href="/inbox" className="text-neutral-300 underline">
-            Inbox
           </Link>
           <button
             type="button"
