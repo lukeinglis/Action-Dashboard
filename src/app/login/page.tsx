@@ -8,7 +8,7 @@ export default function LoginPage() {
   const [signupState, signupAction, signupPending] = useActionState(signup, undefined);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-neutral-950 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-neutral-900 p-4">
       <div className="w-full max-w-sm space-y-6">
         <h1 className="text-xl font-semibold text-neutral-100">Sunday Dashboard</h1>
 
