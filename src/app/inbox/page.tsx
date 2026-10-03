@@ -26,14 +26,17 @@ export default async function InboxPage() {
         </Link>
       </div>
 
-      <form action={uploadScreenshot} className="flex items-center gap-3 rounded-lg border border-neutral-800 p-4">
+      <form
+        action={uploadScreenshot}
+        className="flex flex-col gap-3 rounded-lg border border-neutral-800 p-4 sm:flex-row sm:items-center"
+      >
         <input
           type="file"
           name="file"
           accept="image/*,.heic,.heif"
           multiple
           required
-          className="flex-1 text-sm text-neutral-300"
+          className="min-w-0 flex-1 text-sm text-neutral-300"
         />
         <button
           type="submit"

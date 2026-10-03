@@ -124,8 +124,8 @@ export function Dashboard(props: Props) {
 
   return (
     <div className="flex min-h-full flex-col">
-      <div className="flex items-center justify-between border-b border-neutral-800 p-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 border-b border-neutral-800 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-lg font-semibold text-neutral-100">Dashboard</h1>
           <ViewSwitcher
             views={props.views}
@@ -137,7 +137,7 @@ export function Dashboard(props: Props) {
             onRevert={revert}
           />
         </div>
-        <nav className="flex items-center gap-3 text-sm">
+        <nav className="flex flex-wrap items-center gap-3 text-sm">
           <Link
             href="/inbox"
             className="rounded bg-neutral-100 px-3 py-1.5 font-medium text-neutral-900 hover:bg-white"
