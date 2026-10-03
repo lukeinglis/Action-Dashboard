@@ -31,7 +31,6 @@ export default async function InboxPage() {
           type="file"
           name="file"
           accept="image/*,.heic,.heif"
-          capture="environment"
           multiple
           required
           className="flex-1 text-sm text-neutral-300"
