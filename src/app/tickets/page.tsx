@@ -80,9 +80,9 @@ export default async function TicketsPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-lg font-semibold text-neutral-100">Tickets</h1>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <Link href="/inbox" className="text-sm text-neutral-300 underline">
             Inbox
           </Link>
