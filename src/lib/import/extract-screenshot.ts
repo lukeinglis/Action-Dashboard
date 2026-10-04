@@ -34,6 +34,10 @@ One screenshot may show one or more bet slips ("tickets"). Emit one block per ti
 Bet Slip #<ticket id>
 (Omit "#<ticket id>" — just "Bet Slip" alone — if no ticket/confirmation ID is visible.)
 
+Real sportsbook tickets (DraftKings/FanDuel) usually show each leg's game context as its own row below the market/selection/odds line, laid out as: <away abbreviation/logo> ... <relative time, e.g. "Today 1:00 PM" or "Mon 8:15 PM"> ... <home abbreviation/logo>, left team = away, right team = home. Use that row for Event; do NOT convert a relative time like "Today 1:00 PM" into a guessed absolute Start date — you don't reliably know "today"'s real calendar date from the image, so a confident-looking but wrong Start is worse than omitting it. Only emit Start when an absolute date is actually printed (e.g. "Sep 21" or a full date/time).
+
+Same Game Parlay (SGP) tickets often nest two or more picks from one game under a single combined odds value, with no individual odds shown per pick — and some tickets ("SGPx") combine several such SGP groups plus standalone legs into one larger parlay. Flatten every individual selection into its own "Leg N:" block regardless of this grouping; when a leg's own odds aren't separately shown (only the group/combined odds is), omit that leg's Odds line rather than guessing a split.
+
 Within each ticket block, in this order:
 Type: Straight | <N>-Leg Parlay | <N>-Leg Same Game Parlay
 Bonus Bet                              (only include this literal line if the slip is marked as a bonus/free bet)
@@ -44,16 +48,16 @@ Subject: <the canonical player/team name the leg is about, when it differs from 
 Opponent Subject: <the opposing player/team name, ONLY for "matchup" markets with no single game/Event, e.g. a cross-game player-vs-player bet>
 Event: <Away Team> @ <Home Team>       (omit this line entirely if no single game/matchup is shown, e.g. season futures or cross-game matchups)
 Sport: <sport>/<league>                (REQUIRED — see the Sport determination above; use "unknown" only if truly undeterminable. Omit only the "/<league>" part if the league specifically can't be determined.)
-Start: <ISO 8601 UTC timestamp>        (omit if no date/time is shown)
+Start: <ISO 8601 UTC timestamp>        (omit unless an absolute date is shown — see the game-row note above; do not convert a relative time like "Today 1:00 PM")
 Line: <numeric line>                   (omit if not applicable)
 OverUnder: over | under | yes | no     (omit if not applicable)
-Odds: <american odds, e.g. -150 or +120>
-(repeat "Leg N:" through "Odds:" for each additional leg, in the order shown)
+Odds: <american odds, e.g. -150 or +120>  (omit if this leg has no individually-shown odds, e.g. an SGP pick under a combined group odds)
+(repeat "Leg N:" through "Odds:" for each additional leg, in the order shown, including every individual pick from inside an SGP/SGPx grouping)
 Wager: $<amount>
 To Win: $<amount>
 Payout: $<amount>
 Placed: <ISO 8601 UTC timestamp>       (omit if not shown)
-Promo: <free-text promo name, e.g. "Profit Boost">  (omit if not shown)
+Promo: <free-text promo name, e.g. "Profit Boost", "+50% Parlay Boost", "QUALIFYING BET">  (omit if not shown; also use this for boost/qualifying-bet banners even when a struck-through original odds value is shown alongside a boosted one — transcribe only the final boosted Odds value for the leg/ticket in that case)
 
 === FORMAT 2: Fantasy Matchup (season-long fantasy, e.g. Sleeper/ESPN/Yahoo matchup screen) ===
 
