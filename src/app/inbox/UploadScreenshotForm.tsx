@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { uploadScreenshot } from "./actions";
 
 const MAX_DIMENSION = 1920;
@@ -37,18 +38,9 @@ async function compressImage(file: File): Promise<File> {
   }
 }
 
-function isRedirectError(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "digest" in err &&
-    typeof (err as { digest?: unknown }).digest === "string" &&
-    (err as { digest: string }).digest.startsWith("NEXT_REDIRECT")
-  );
-}
-
 export function UploadScreenshotForm() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -64,8 +56,9 @@ export function UploadScreenshotForm() {
         const formData = new FormData();
         for (const file of compressed) formData.append("file", file);
         await uploadScreenshot(formData);
+        if (inputRef.current) inputRef.current.value = "";
+        router.refresh();
       } catch (err) {
-        if (isRedirectError(err)) throw err;
         setError(err instanceof Error ? err.message : "Upload failed");
       }
     });

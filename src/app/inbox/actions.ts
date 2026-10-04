@@ -164,7 +164,6 @@ export async function uploadScreenshot(formData: FormData): Promise<void> {
   }
 
   revalidatePath("/inbox");
-  redirect("/inbox");
 }
 
 /** Creates an ImportRecord from pasted slip text and runs it through the pipeline right away (docs/PRD.md section 29). */
