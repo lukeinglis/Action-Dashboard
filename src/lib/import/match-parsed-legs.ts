@@ -55,11 +55,14 @@ export interface LegMatch {
   subjects: SubjectProposal[];
 }
 
+// Extraction can't always determine Sport (docs/PRD.md section 30 note on
+// Sport inference) — when the parsed leg's sport is unknown, fall back to
+// matching by name alone rather than failing to match at all.
 function findTeam(name: string, sport: string, teams: TeamCandidate[]): TeamCandidate | undefined {
   const norm = normalizeEventName(name);
   return teams.find(
     (t) =>
-      t.sport === sport &&
+      (!sport || t.sport === sport) &&
       (normalizeEventName(t.name) === norm || (t.abbreviation && normalizeEventName(t.abbreviation) === norm)),
   );
 }
@@ -70,7 +73,7 @@ function findParticipant(
   participants: ParticipantCandidate[],
 ): ParticipantCandidate | undefined {
   const norm = normalizeEventName(name);
-  return participants.find((p) => p.sport === sport && normalizeEventName(p.name) === norm);
+  return participants.find((p) => (!sport || p.sport === sport) && normalizeEventName(p.name) === norm);
 }
 
 function sameName(a: string | undefined, b: string | undefined): boolean {
@@ -87,9 +90,12 @@ export function matchParsedLeg(leg: ParsedLeg, candidates: MatchCandidates, time
     const awayTeam = findTeam(leg.awayTeamName!, leg.sport, candidates.teams);
     const homeTeam = findTeam(leg.homeTeamName!, leg.sport, candidates.teams);
     if (awayTeam && homeTeam) {
+      // leg.sport may be unknown (empty); the matched teams' own sport is
+      // authoritative and required to build a key comparable to candidates'.
+      const effectiveSport = leg.sport || awayTeam.sport || homeTeam.sport;
       const matchKey = buildEventMatchKey(
         {
-          sport: leg.sport,
+          sport: effectiveSport,
           league: leg.league,
           name: `${leg.awayTeamName} @ ${leg.homeTeamName}`,
           startTimeUtc: leg.startTimeUtc,

@@ -146,4 +146,10 @@ describe("parseSlipText", () => {
     const broken = STRAIGHT.replace(/Wager: \$50\.00\n/, "");
     expect(() => parseSlipText(broken)).toThrow(SlipParseError);
   });
+
+  it("does not throw when Sport is missing from a leg (extraction can't always determine it)", () => {
+    const noSport = STRAIGHT.replace("Sport: football/NFL\n", "");
+    const [ticket] = parseSlipText(noSport);
+    expect(ticket.legs[0].sport).toBe("");
+  });
 });

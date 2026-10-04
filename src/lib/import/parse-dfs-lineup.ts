@@ -66,10 +66,14 @@ function parseOneLineup(lineupRaw: string): ParsedDfsLineup {
   const header = parseKeyValueLines(lineupRaw.split(/^Slot: /m)[0]);
 
   const platform = header.get("platform");
-  const sportRaw = header.get("sport");
-  if (!platform || !sportRaw) {
-    throw new DfsLineupParseError(`Missing Platform or Sport in lineup:\n${lineupRaw}`);
+  if (!platform) {
+    throw new DfsLineupParseError(`Missing Platform in lineup:\n${lineupRaw}`);
   }
+
+  // Sport isn't always determinable from extraction (docs/PRD.md section 30
+  // Sport inference note); fall back to empty and let matching proceed by
+  // name alone rather than failing the whole import.
+  const sportRaw = header.get("sport") ?? "";
   const [sportName, league] = sportRaw.split("/").map((s) => s.trim());
 
   const parts = lineupRaw.split(/^Slot: (.+)$/m);
