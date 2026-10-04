@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { listPendingImportRecords } from "@/lib/import-records/import-records";
-import { pasteSlipText, uploadScreenshot } from "./actions";
+import { pasteSlipText } from "./actions";
+import { UploadScreenshotForm } from "./UploadScreenshotForm";
 
 export default async function InboxPage() {
   const supabase = await createClient();
@@ -26,25 +27,7 @@ export default async function InboxPage() {
         </Link>
       </div>
 
-      <form
-        action={uploadScreenshot}
-        className="flex flex-col gap-3 rounded-lg border border-neutral-800 p-4 sm:flex-row sm:items-center"
-      >
-        <input
-          type="file"
-          name="file"
-          accept="image/*,.heic,.heif"
-          multiple
-          required
-          className="min-w-0 flex-1 text-sm text-neutral-300"
-        />
-        <button
-          type="submit"
-          className="rounded bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-900"
-        >
-          Upload Screenshot
-        </button>
-      </form>
+      <UploadScreenshotForm />
 
       <form action={pasteSlipText} className="space-y-2 rounded-lg border border-neutral-800 p-4">
         <label className="block text-xs text-neutral-400">
