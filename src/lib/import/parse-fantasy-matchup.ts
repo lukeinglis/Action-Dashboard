@@ -13,7 +13,7 @@
 // Never silently drops data: any structural problem throws
 // FantasyMatchupParseError, and the whole ImportRecord is marked failed.
 
-import { normalizeLineEndings, parseKeyValueLines, extractRepeatedField } from "./text-blocks";
+import { normalizeLineEndings, parseKeyValueLines, extractRepeatedField, parseSportField } from "./text-blocks";
 
 export class FantasyMatchupParseError extends Error {}
 
@@ -55,11 +55,7 @@ function parseOneMatchup(matchupRaw: string): ParsedFantasyMatchup {
     );
   }
 
-  // Sport isn't always determinable from extraction (docs/PRD.md section 30
-  // Sport inference note); fall back to empty and let matching proceed by
-  // name alone rather than failing the whole import.
-  const sportRaw = fields.get("sport") ?? "";
-  const [sportName, league] = sportRaw.split("/").map((s) => s.trim());
+  const { sport: sportName, league } = parseSportField(fields.get("sport"));
 
   const weekRaw = fields.get("week");
   const week = weekRaw !== undefined ? parseInt(weekRaw, 10) : undefined;

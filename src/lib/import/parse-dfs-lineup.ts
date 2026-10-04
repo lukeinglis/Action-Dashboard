@@ -14,7 +14,7 @@
 // Never silently drops data: any structural problem throws
 // DfsLineupParseError, and the whole ImportRecord is marked failed.
 
-import { extractDollarCents, normalizeLineEndings, parseKeyValueLines } from "./text-blocks";
+import { extractDollarCents, normalizeLineEndings, parseKeyValueLines, parseSportField } from "./text-blocks";
 
 export class DfsLineupParseError extends Error {}
 
@@ -70,11 +70,7 @@ function parseOneLineup(lineupRaw: string): ParsedDfsLineup {
     throw new DfsLineupParseError(`Missing Platform in lineup:\n${lineupRaw}`);
   }
 
-  // Sport isn't always determinable from extraction (docs/PRD.md section 30
-  // Sport inference note); fall back to empty and let matching proceed by
-  // name alone rather than failing the whole import.
-  const sportRaw = header.get("sport") ?? "";
-  const [sportName, league] = sportRaw.split("/").map((s) => s.trim());
+  const { sport: sportName, league } = parseSportField(header.get("sport"));
 
   const parts = lineupRaw.split(/^Slot: (.+)$/m);
   if (parts.length < 3) {

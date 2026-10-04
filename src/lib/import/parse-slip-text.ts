@@ -15,7 +15,7 @@
 // and the whole ImportRecord is marked failed rather than saving a partial
 // or guessed result.
 
-import { extractDollarCents, normalizeLineEndings, parseKeyValueLines } from "./text-blocks";
+import { extractDollarCents, normalizeLineEndings, parseKeyValueLines, parseSportField } from "./text-blocks";
 
 export class SlipParseError extends Error {}
 
@@ -65,11 +65,7 @@ function parseOneLeg(legBlock: string, ticketRaw: string): ParsedLeg {
     );
   }
 
-  // Sport isn't always determinable from extraction (docs/PRD.md section 30
-  // Sport inference note); fall back to empty and let matching proceed by
-  // name alone rather than failing the whole ticket.
-  const sport = fields.get("sport") ?? "";
-  const [sportName, league] = sport.split("/").map((s) => s.trim());
+  const { sport: sportName, league } = parseSportField(fields.get("sport"));
 
   let awayTeamName: string | undefined;
   let homeTeamName: string | undefined;

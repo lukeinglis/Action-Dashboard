@@ -57,3 +57,17 @@ export function extractDollarCents(raw: string): number | null {
   if (!match) return null;
   return Math.round(parseFloat(match[1].replace(/,/g, "")) * 100);
 }
+
+/**
+ * Parses a "Sport: <sport>/<league>" field value into [sport, league].
+ * Extraction can't always determine Sport (the extraction prompt emits
+ * the literal "unknown" when it truly can't tell, and the field may be
+ * missing entirely from pasted text) — both normalize to "", the same
+ * signal match-parsed-legs.ts / match-fantasy-dfs.ts use to fall back to
+ * matching by name alone instead of failing.
+ */
+export function parseSportField(raw: string | undefined): { sport: string; league: string | undefined } {
+  if (!raw || raw.trim().toLowerCase() === "unknown") return { sport: "", league: undefined };
+  const [sport, league] = raw.split("/").map((s) => s.trim());
+  return { sport, league: league || undefined };
+}

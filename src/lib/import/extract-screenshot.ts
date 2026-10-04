@@ -14,12 +14,19 @@
 // transcribed text to the matching parser by its header line.
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_MODEL = "claude-haiku-4-5";
+// Sonnet, not Haiku: Sport inference (team/player name -> league) needs
+// reliable instruction-following, not just speed — Haiku was observed in
+// production dropping the Sport field despite explicit prompt instructions.
+const ANTHROPIC_MODEL = "claude-sonnet-4-6";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_OUTPUT_TOKENS = 4_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 
-const SYSTEM_PROMPT = `You transcribe screenshots of sportsbook bet slips, season-long fantasy matchups, or DFS (daily fantasy sports) lineups into one of three strict text formats. First decide which of the three the screenshot shows, then output ONLY the transcribed text in that one format — no commentary, no markdown fences, no mixing formats in one response.
+const SYSTEM_PROMPT = `You transcribe screenshots of sportsbook bet slips, season-long fantasy matchups, or DFS (daily fantasy sports) lineups into one of three strict text formats.
+
+Before transcribing, work out two things silently: (1) which of the three formats the screenshot shows, and (2) the Sport/league for every team, player, or matchup pictured — identify it from the team names, player names, or league branding you recognize (e.g. "Colts" and "Commanders" -> football/NFL; "Lakers" -> basketball/NBA; a name you don't recognize as a team but that sounds like an athlete's name -> infer from context clues like market type, e.g. "passing_yards" implies football). You almost always know this even when the word "football" or "NFL" is never printed — real-world bet slips rarely spell it out. Only use "unknown" for Sport in the rare case where there is truly no identifiable team, player, or league anywhere in the image. Every "Sport:" line in your output must carry this same determination — it is a required field, not an optional one like the "(omit if not shown)" fields below.
+
+Then output ONLY the transcribed text in the one matching format — no commentary, no markdown fences, no mixing formats in one response.
 
 === FORMAT 1: Bet Slip (sportsbook ticket, e.g. DraftKings/FanDuel Sportsbook) ===
 
@@ -36,7 +43,7 @@ Selection: <the selected outcome as shown, e.g. "Kansas City Chiefs" or "Patrick
 Subject: <the canonical player/team name the leg is about, when it differs from Selection — required for player-prop and team_total markets, optional otherwise>
 Opponent Subject: <the opposing player/team name, ONLY for "matchup" markets with no single game/Event, e.g. a cross-game player-vs-player bet>
 Event: <Away Team> @ <Home Team>       (omit this line entirely if no single game/matchup is shown, e.g. season futures or cross-game matchups)
-Sport: <sport>/<league>                (ALWAYS include this line — infer it from the team/player/league names even if the word itself is never printed, e.g. "Colts @ Commanders" implies "football/NFL"; omit only "/<league>" if the league truly can't be determined)
+Sport: <sport>/<league>                (REQUIRED — see the Sport determination above; use "unknown" only if truly undeterminable. Omit only the "/<league>" part if the league specifically can't be determined.)
 Start: <ISO 8601 UTC timestamp>        (omit if no date/time is shown)
 Line: <numeric line>                   (omit if not applicable)
 OverUnder: over | under | yes | no     (omit if not applicable)
@@ -56,7 +63,7 @@ Fantasy Matchup
 Within each matchup block, in this order:
 Platform: <e.g. Sleeper, ESPN, Yahoo>  (omit if not shown)
 League: <the fantasy league's name>
-Sport: <sport>/<league>                (ALWAYS include this line — infer it from team names, player names, or league context even if the word itself is never printed; omit only "/<league>" if the league truly can't be determined)
+Sport: <sport>/<league>                (REQUIRED — see the Sport determination above; use "unknown" only if truly undeterminable. Omit only the "/<league>" part if the league specifically can't be determined.)
 Season: <e.g. 2026>                    (omit if not shown)
 Week: <numeric week>                   (omit if not shown)
 My Team: <the user's fantasy team name>
@@ -77,7 +84,7 @@ DFS Lineup
 
 Within each lineup block, in this order:
 Platform: <e.g. DraftKings>
-Sport: <sport>/<league>                (ALWAYS include this line — infer it from player names, team names, or slate context even if the word itself is never printed; omit only "/<league>" if the league truly can't be determined)
+Sport: <sport>/<league>                (REQUIRED — see the Sport determination above; use "unknown" only if truly undeterminable. Omit only the "/<league>" part if the league specifically can't be determined.)
 Slate: <slate name, e.g. "Main Slate"> (omit if not shown)
 Slot: <roster slot label, e.g. QB, RB, FLEX, DST>
 Player: <player name>
@@ -91,7 +98,7 @@ Current Points: <numeric total current points for the entry>  (omit if not shown
 
 === General rules ===
 
-Transcribe values exactly as shown on the screenshot. Do not invent or infer any value that isn't visibly present — omit the line instead, with one deliberate exception: "Sport" is always required and should be inferred from recognizable team, player, or league names (e.g. "Colts" and "Commanders" are NFL teams, so "football/NFL") even when the word "football" or league name is never printed as text. This is reliable domain knowledge, not a guess — never omit a Sport line. Every emitted block must use exactly one of the three formats above; never blend fields from different formats in the same block.`;
+Transcribe values exactly as shown on the screenshot. Do not invent or infer any value that isn't visibly present — omit the line instead, except for "Sport," which is required on every block per the determination described above. Every emitted block must use exactly one of the three formats above; never blend fields from different formats in the same block.`;
 
 export interface ExtractScreenshotArgs {
   apiKey: string;
