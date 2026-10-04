@@ -45,7 +45,7 @@ export function matchPlayerToParticipantAndEvent(
 ): PlayerMatch {
   const norm = normalizeEventName(playerName);
   const participant = candidates.participants.find(
-    (p) => p.sport === sport && normalizeEventName(p.name) === norm,
+    (p) => (!sport || p.sport === sport) && normalizeEventName(p.name) === norm,
   );
   if (!participant) {
     return { participantMatched: false, eventMatched: false };

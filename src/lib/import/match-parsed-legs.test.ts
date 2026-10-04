@@ -101,6 +101,23 @@ describe("matchParsedLeg", () => {
     ]);
   });
 
+  it("matches teams and the Event by name alone when Sport couldn't be extracted", () => {
+    const match = matchParsedLeg(
+      leg({
+        sport: "",
+        league: undefined,
+        awayTeamName: "Kansas City Chiefs",
+        homeTeamName: "Buffalo Bills",
+        startTimeUtc: event.startTimeUtc,
+      }),
+      candidates,
+      TZ,
+    );
+    expect(match.eventMatched).toBe(true);
+    expect(match.eventId).toBe("event-1");
+    expect(match.subjects.every((s) => s.matched)).toBe(true);
+  });
+
   it("uses Opponent Subject for a cross-game matchup with no Event", () => {
     const match = matchParsedLeg(
       leg({

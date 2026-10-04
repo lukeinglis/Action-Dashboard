@@ -59,13 +59,16 @@ function parseOneLeg(legBlock: string, ticketRaw: string): ParsedLeg {
 
   const marketType = fields.get("market");
   const selection = fields.get("selection");
-  const sport = fields.get("sport");
-  if (!marketType || !selection || !sport) {
+  if (!marketType || !selection) {
     throw new SlipParseError(
-      `Leg is missing Market, Selection, or Sport in ticket:\n${ticketRaw}`,
+      `Leg is missing Market or Selection in ticket:\n${ticketRaw}`,
     );
   }
 
+  // Sport isn't always determinable from extraction (docs/PRD.md section 30
+  // Sport inference note); fall back to empty and let matching proceed by
+  // name alone rather than failing the whole ticket.
+  const sport = fields.get("sport") ?? "";
   const [sportName, league] = sport.split("/").map((s) => s.trim());
 
   let awayTeamName: string | undefined;

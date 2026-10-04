@@ -47,14 +47,18 @@ function parseOneMatchup(matchupRaw: string): ParsedFantasyMatchup {
   const fields = parseKeyValueLines(matchupRaw);
 
   const leagueName = fields.get("league");
-  const sportRaw = fields.get("sport");
   const userTeamName = fields.get("my team");
   const opponentTeamName = fields.get("opponent");
-  if (!leagueName || !sportRaw || !userTeamName || !opponentTeamName) {
+  if (!leagueName || !userTeamName || !opponentTeamName) {
     throw new FantasyMatchupParseError(
-      `Missing League, Sport, "My Team", or Opponent in matchup:\n${matchupRaw}`,
+      `Missing League, "My Team", or Opponent in matchup:\n${matchupRaw}`,
     );
   }
+
+  // Sport isn't always determinable from extraction (docs/PRD.md section 30
+  // Sport inference note); fall back to empty and let matching proceed by
+  // name alone rather than failing the whole import.
+  const sportRaw = fields.get("sport") ?? "";
   const [sportName, league] = sportRaw.split("/").map((s) => s.trim());
 
   const weekRaw = fields.get("week");
