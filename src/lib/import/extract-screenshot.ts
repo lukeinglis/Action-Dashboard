@@ -36,7 +36,7 @@ Selection: <the selected outcome as shown, e.g. "Kansas City Chiefs" or "Patrick
 Subject: <the canonical player/team name the leg is about, when it differs from Selection — required for player-prop and team_total markets, optional otherwise>
 Opponent Subject: <the opposing player/team name, ONLY for "matchup" markets with no single game/Event, e.g. a cross-game player-vs-player bet>
 Event: <Away Team> @ <Home Team>       (omit this line entirely if no single game/matchup is shown, e.g. season futures or cross-game matchups)
-Sport: <sport>/<league>                (e.g. "football/NFL"; omit "/<league>" if not shown)
+Sport: <sport>/<league>                (ALWAYS include this line — infer it from the team/player/league names even if the word itself is never printed, e.g. "Colts @ Commanders" implies "football/NFL"; omit only "/<league>" if the league truly can't be determined)
 Start: <ISO 8601 UTC timestamp>        (omit if no date/time is shown)
 Line: <numeric line>                   (omit if not applicable)
 OverUnder: over | under | yes | no     (omit if not applicable)
@@ -56,7 +56,7 @@ Fantasy Matchup
 Within each matchup block, in this order:
 Platform: <e.g. Sleeper, ESPN, Yahoo>  (omit if not shown)
 League: <the fantasy league's name>
-Sport: <sport>/<league>                (e.g. "football/NFL"; omit "/<league>" if not shown)
+Sport: <sport>/<league>                (ALWAYS include this line — infer it from team names, player names, or league context even if the word itself is never printed; omit only "/<league>" if the league truly can't be determined)
 Season: <e.g. 2026>                    (omit if not shown)
 Week: <numeric week>                   (omit if not shown)
 My Team: <the user's fantasy team name>
@@ -77,7 +77,7 @@ DFS Lineup
 
 Within each lineup block, in this order:
 Platform: <e.g. DraftKings>
-Sport: <sport>/<league>                (e.g. "football/NFL"; omit "/<league>" if not shown)
+Sport: <sport>/<league>                (ALWAYS include this line — infer it from player names, team names, or slate context even if the word itself is never printed; omit only "/<league>" if the league truly can't be determined)
 Slate: <slate name, e.g. "Main Slate"> (omit if not shown)
 Slot: <roster slot label, e.g. QB, RB, FLEX, DST>
 Player: <player name>
@@ -91,7 +91,7 @@ Current Points: <numeric total current points for the entry>  (omit if not shown
 
 === General rules ===
 
-Transcribe values exactly as shown on the screenshot. Do not invent or infer any value that isn't visibly present — omit the line instead. Every emitted block must use exactly one of the three formats above; never blend fields from different formats in the same block.`;
+Transcribe values exactly as shown on the screenshot. Do not invent or infer any value that isn't visibly present — omit the line instead, with one deliberate exception: "Sport" is always required and should be inferred from recognizable team, player, or league names (e.g. "Colts" and "Commanders" are NFL teams, so "football/NFL") even when the word "football" or league name is never printed as text. This is reliable domain knowledge, not a guess — never omit a Sport line. Every emitted block must use exactly one of the three formats above; never blend fields from different formats in the same block.`;
 
 export interface ExtractScreenshotArgs {
   apiKey: string;

@@ -92,6 +92,8 @@ export interface FantasyMatchupPaneItem {
   opponentTeamName: string;
   status: FantasyMatchupStatus;
   showMarkFinal: boolean;
+  /** Distinct Event ids linked via this matchup's roster slots, for click-through to Event Detail. */
+  eventIds: string[];
 }
 
 /** Active DFSEntry for the DFS context pane; Mark Final (docs/PRD.md section 8). */

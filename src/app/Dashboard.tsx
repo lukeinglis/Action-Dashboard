@@ -199,7 +199,7 @@ export function Dashboard(props: Props) {
         />
 
         {openPane === "what_do_i_need" && <WhatDoINeedPane entries={props.whatDoINeed} />}
-        {openPane === "fantasy" && <FantasyPane items={props.fantasyMatchups} />}
+        {openPane === "fantasy" && <FantasyPane items={props.fantasyMatchups} onSelectEvent={selectEvent} />}
         {openPane === "dfs" && <DFSPane items={props.dfsEntries} />}
       </div>
     </div>
