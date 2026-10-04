@@ -75,7 +75,20 @@ export default async function TicketsPage() {
       return isLegLive(legSettlement(leg), linkedStatuses);
     });
     const status = effectiveTicketStatus(ticket.manualStatus, ticketLegs, anyLinkedEventLive);
-    return { ticket, legCount: ticketLegs.length, status };
+    return {
+      ticket,
+      legCount: ticketLegs.length,
+      status,
+      legs: ticketLegs.map((l) => ({
+        id: l.id,
+        marketType: l.marketType,
+        selection: l.selection ?? null,
+        rawDescription: l.rawDescription ?? null,
+        line: l.line ?? null,
+        oddsAmerican: l.oddsAmerican ?? null,
+        settlement: legSettlement(l),
+      })),
+    };
   });
 
   return (

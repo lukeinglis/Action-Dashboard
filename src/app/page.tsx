@@ -300,6 +300,15 @@ export default async function Home() {
         section,
         legsRemaining,
         nextEventStartUtc: nextEvent(linkedEvents)?.startTimeUtc ?? null,
+        legs: ticketLegs.map((l) => ({
+          id: l.id,
+          marketType: l.marketType,
+          selection: l.selection ?? null,
+          rawDescription: l.rawDescription ?? null,
+          line: l.line ?? null,
+          oddsAmerican: l.oddsAmerican ?? null,
+          settlement: legSettlement(l),
+        })),
       },
     ];
   });

@@ -5,7 +5,7 @@
 // touches the database, so unmatched legs/subjects are simply flagged for
 // the review screen rather than silently created.
 
-import { buildEventMatchKey, normalizeEventName } from "@/lib/events/match-key";
+import { buildEventMatchKey, buildTeamPairKey, normalizeEventName } from "@/lib/events/match-key";
 import { defaultSubjectDirection, marketCategory } from "@/lib/betting/subjects";
 import type { RootingDirection } from "@/lib/types/domain";
 import type { ParsedLeg } from "./parse-slip-text";
@@ -60,11 +60,25 @@ export interface LegMatch {
 // matching by name alone rather than failing to match at all.
 function findTeam(name: string, sport: string, teams: TeamCandidate[]): TeamCandidate | undefined {
   const norm = normalizeEventName(name);
-  return teams.find(
+  const sportOk = (t: TeamCandidate) => !sport || t.sport === sport;
+
+  const exact = teams.find(
     (t) =>
-      (!sport || t.sport === sport) &&
+      sportOk(t) &&
       (normalizeEventName(t.name) === norm || (t.abbreviation && normalizeEventName(t.abbreviation) === norm)),
   );
+  if (exact) return exact;
+
+  // Sportsbook apps commonly display a team as "<abbreviation> <mascot>"
+  // (e.g. "JAX Jaguars") rather than the full name ("Jacksonville Jaguars")
+  // or the bare abbreviation ("JAX") — neither of which the exact check
+  // above matches. Recognize that hybrid form against each candidate.
+  return teams.find((t) => {
+    if (!sportOk(t) || !t.abbreviation) return false;
+    const mascot = t.name.trim().split(/\s+/).pop();
+    if (!mascot) return false;
+    return norm === normalizeEventName(`${t.abbreviation} ${mascot}`);
+  });
 }
 
 function findParticipant(
@@ -119,6 +133,31 @@ export function matchParsedLeg(leg: ParsedLeg, candidates: MatchCandidates, time
               timeZone,
             ) === matchKey,
         )?.id;
+      }
+
+      // Real bet-slip screenshots frequently don't show a per-leg kickoff
+      // time, so leg.startTimeUtc is often missing and the date-keyed match
+      // above can't run at all (buildEventMatchKey returns null without a
+      // start time). Fall back to matching by team pair alone — two teams
+      // rarely have more than one scheduled meeting in the near term — and
+      // pick the candidate closest to now when more than one exists.
+      if (!eventId) {
+        const pairKey = buildTeamPairKey(effectiveSport, awayTeam.id, homeTeam.id);
+        const pairCandidates = candidates.events.filter(
+          (e) => e.homeTeamId && e.awayTeamId && buildTeamPairKey(e.sport, e.awayTeamId, e.homeTeamId) === pairKey,
+        );
+        if (pairCandidates.length === 1) {
+          eventId = pairCandidates[0].id;
+        } else if (pairCandidates.length > 1) {
+          const now = Date.now();
+          eventId = pairCandidates.reduce<EventCandidate | undefined>((closest, e) => {
+            if (!e.startTimeUtc) return closest;
+            if (!closest?.startTimeUtc) return e;
+            const eDiff = Math.abs(new Date(e.startTimeUtc).getTime() - now);
+            const closestDiff = Math.abs(new Date(closest.startTimeUtc).getTime() - now);
+            return eDiff < closestDiff ? e : closest;
+          }, undefined)?.id;
+        }
       }
     }
   }

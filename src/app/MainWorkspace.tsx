@@ -134,7 +134,7 @@ function AllActiveTickets({
 }
 
 function StaticTicketRow({ item }: { item: DashboardTicketItem }) {
-  const { ticket, legCount, status } = item;
+  const { ticket, legCount, status, legs } = item;
   return (
     <Link
       href={`/tickets/${ticket.id}`}
@@ -153,6 +153,19 @@ function StaticTicketRow({ item }: { item: DashboardTicketItem }) {
           {legCount} leg{legCount === 1 ? "" : "s"}
         </span>
       </div>
+      {legs.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {legs.map((leg) => (
+            <li key={leg.id} className="flex items-center justify-between gap-2 text-xs text-neutral-400">
+              <span className="truncate">
+                {leg.selection ?? leg.rawDescription ?? leg.marketType}
+                {leg.oddsAmerican != null ? ` (${leg.oddsAmerican > 0 ? "+" : ""}${leg.oddsAmerican})` : ""}
+              </span>
+              <span className="shrink-0 rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-400">{leg.settlement}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </Link>
   );
 }
