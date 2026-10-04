@@ -83,6 +83,9 @@ export default async function TicketsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-lg font-semibold text-neutral-100">Tickets</h1>
         <div className="flex flex-wrap gap-3">
+          <Link href="/" className="text-sm text-neutral-300 underline">
+            Dashboard
+          </Link>
           <Link href="/inbox" className="text-sm text-neutral-300 underline">
             Inbox
           </Link>

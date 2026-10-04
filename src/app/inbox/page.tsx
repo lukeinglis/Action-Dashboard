@@ -22,9 +22,14 @@ export default async function InboxPage() {
             <span className="ml-2 text-sm font-normal text-neutral-500">{records.length} to review</span>
           )}
         </h1>
-        <Link href="/tickets" className="text-sm text-neutral-300 underline">
-          Tickets
-        </Link>
+        <div className="flex gap-3">
+          <Link href="/" className="text-sm text-neutral-300 underline">
+            Dashboard
+          </Link>
+          <Link href="/tickets" className="text-sm text-neutral-300 underline">
+            Tickets
+          </Link>
+        </div>
       </div>
 
       <UploadScreenshotForm />

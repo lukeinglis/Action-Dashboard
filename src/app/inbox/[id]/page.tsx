@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { toImportRecord, type ImportRecordRow } from "@/lib/db/rows";
@@ -49,9 +50,14 @@ export default async function InboxItemPage({ params }: { params: Promise<{ id: 
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-6">
-      <h1 className="text-lg font-semibold text-neutral-100">
-        {isReview ? "Review Import" : record.status === "failed" ? "Parse Failed" : "Transcribe Screenshot"}
-      </h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-neutral-100">
+          {isReview ? "Review Import" : record.status === "failed" ? "Parse Failed" : "Transcribe Screenshot"}
+        </h1>
+        <Link href="/inbox" className="text-sm text-neutral-300 underline">
+          Back to Inbox
+        </Link>
+      </div>
 
       {record.status === "failed" && record.parseError && (
         <p className="rounded border border-red-800 bg-red-950/40 px-3 py-2 text-sm text-red-300">

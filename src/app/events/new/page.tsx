@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { toTeam, type TeamRow } from "@/lib/db/rows";
 import { NewEventForm } from "./NewEventForm";
@@ -11,7 +12,12 @@ export default async function NewEventPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-4 p-6">
-      <h1 className="text-lg font-semibold text-neutral-100">New Event</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold text-neutral-100">New Event</h1>
+        <Link href="/events" className="text-sm text-neutral-300 underline">
+          Back to Events
+        </Link>
+      </div>
       <NewEventForm teams={teams} />
     </div>
   );
