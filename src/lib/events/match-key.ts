@@ -58,3 +58,14 @@ export function buildEventMatchKey(event: MatchKeyInput, timeZone: string): stri
     localDate,
   ].join("|");
 }
+
+/**
+ * Order-independent team-pair key, ignoring date. Used as a fallback when a
+ * parsed leg has no Start timestamp (real bet-slip screenshots often don't
+ * show per-leg kickoff time, so buildEventMatchKey can't be built at all) —
+ * two teams rarely have more than one scheduled meeting in the near term,
+ * so matching on the pair alone is a safe fallback.
+ */
+export function buildTeamPairKey(sport: string, teamAId: string, teamBId: string): string {
+  return ["teampair", sport, ...[teamAId, teamBId].sort()].join("|");
+}

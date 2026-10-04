@@ -12,7 +12,7 @@ import type { TicketWithStatus } from "./types";
 const STATUSES: TicketStatus[] = ["pending", "active", "won", "lost", "void", "cashed_out"];
 
 export function TicketCard({ item, onDeleted }: { item: TicketWithStatus; onDeleted: () => void }) {
-  const { ticket, legCount, status } = item;
+  const { ticket, legCount, status, legs } = item;
   const [isPending, startTransition] = useTransition();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: ticket.id,
@@ -54,6 +54,20 @@ export function TicketCard({ item, onDeleted }: { item: TicketWithStatus; onDele
         <span>{legCount} leg{legCount === 1 ? "" : "s"}</span>
         {ticket.isBonusBet && <span className="text-amber-400">bonus</span>}
       </div>
+
+      {legs.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {legs.map((leg) => (
+            <li key={leg.id} className="flex items-center justify-between gap-2 text-xs text-neutral-400">
+              <span className="truncate">
+                {leg.selection ?? leg.rawDescription ?? leg.marketType}
+                {leg.oddsAmerican != null ? ` (${leg.oddsAmerican > 0 ? "+" : ""}${leg.oddsAmerican})` : ""}
+              </span>
+              <span className="shrink-0 rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-400">{leg.settlement}</span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
         <select

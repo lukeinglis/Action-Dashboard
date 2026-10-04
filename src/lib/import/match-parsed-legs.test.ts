@@ -118,6 +118,50 @@ describe("matchParsedLeg", () => {
     expect(match.subjects.every((s) => s.matched)).toBe(true);
   });
 
+  it("matches a team shown as '<abbreviation> <mascot>' (common sportsbook display format)", () => {
+    const match = matchParsedLeg(
+      leg({ marketType: "moneyline", selection: "KC Chiefs", subject: "KC Chiefs" }),
+      candidates,
+      TZ,
+    );
+    expect(match.subjects[0]).toEqual({
+      name: "KC Chiefs",
+      teamId: "team-chiefs",
+      participantId: undefined,
+      matched: true,
+      direction: "for",
+    });
+  });
+
+  it("matches the Event by team pair alone when the leg has no Start timestamp", () => {
+    const match = matchParsedLeg(
+      leg({ awayTeamName: "Kansas City Chiefs", homeTeamName: "Buffalo Bills", startTimeUtc: undefined }),
+      candidates,
+      TZ,
+    );
+    expect(match.eventMatched).toBe(true);
+    expect(match.eventId).toBe("event-1");
+  });
+
+  it("picks the team-pair candidate closest to now when more than one exists and Start is missing", () => {
+    const pastRematch = {
+      id: "event-0",
+      sport: "football",
+      league: "NFL",
+      name: "Kansas City Chiefs @ Buffalo Bills",
+      startTimeUtc: "2020-01-01T00:00:00Z",
+      homeTeamId: "team-bills",
+      awayTeamId: "team-chiefs",
+    };
+    const twoCandidates: MatchCandidates = { ...candidates, events: [pastRematch, event] };
+    const match = matchParsedLeg(
+      leg({ awayTeamName: "Kansas City Chiefs", homeTeamName: "Buffalo Bills", startTimeUtc: undefined }),
+      twoCandidates,
+      TZ,
+    );
+    expect(match.eventId).toBe("event-1");
+  });
+
   it("uses Opponent Subject for a cross-game matchup with no Event", () => {
     const match = matchParsedLeg(
       leg({
