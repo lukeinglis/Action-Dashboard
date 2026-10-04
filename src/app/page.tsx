@@ -6,8 +6,10 @@ import { resolveLayoutOnRestore, resolveOpeningState } from "@/lib/dashboard/vie
 import {
   activeBetLegSubjects,
   computeRootingLabels,
+  dfsExposureCount,
   dfsRootingSubjects,
   eventExposureCount,
+  fantasyExposureCount,
   fantasyRootingSubjects,
   type RootingLabel,
 } from "@/lib/dashboard/exposure";
@@ -227,9 +229,18 @@ export default async function Home() {
     return null;
   }
 
-  // Schedule Rail: exposure counts, eligibility (docs/PRD.md section 8, 11).
+  // Schedule Rail: exposure counts, eligibility (docs/PRD.md section 11.6:
+  // betting + fantasy + DFS terms summed together).
+  function totalExposureCount(eventId: string): number {
+    return (
+      eventExposureCount(eventId, links, legSettlementByLegId, ticketStatusByLegId) +
+      fantasyExposureCount(eventId, fantasyRosterSlots) +
+      dfsExposureCount(eventId, dfsLineupSlots, dfsEntries)
+    );
+  }
+
   const eligibleEvents = events.filter((event) => {
-    const exposureCount = eventExposureCount(event.id, links, legSettlementByLegId, ticketStatusByLegId);
+    const exposureCount = totalExposureCount(event.id);
     return isScheduleRailEligible(
       {
         id: event.id,
@@ -261,7 +272,7 @@ export default async function Home() {
     period: displayedPeriod(event),
     clock: displayedClock(event),
     isPinned: event.isPinned,
-    exposureCount: eventExposureCount(event.id, links, legSettlementByLegId, ticketStatusByLegId),
+    exposureCount: totalExposureCount(event.id),
   }));
 
   // Resolve the selected Event / fall back to All Active Tickets (docs/PRD.md section 46).
@@ -408,10 +419,12 @@ export default async function Home() {
     const section = fantasyDfsSection(matchup.status, matchup.finalizedAt, now, timezone, rolloverHour);
     if (section !== "active") return [];
     const league = fantasyLeagueById.get(matchup.fantasyLeagueId);
-    const linkedEventStatuses = (fantasyRosterSlotsByMatchupId.get(matchup.id) ?? []).map((slot) => {
+    const matchupSlots = fantasyRosterSlotsByMatchupId.get(matchup.id) ?? [];
+    const linkedEventStatuses = matchupSlots.map((slot) => {
       const e = slot.eventId ? eventById.get(slot.eventId) : undefined;
       return e ? displayedStatus(e) : null;
     });
+    const eventIds = [...new Set(matchupSlots.flatMap((slot) => (slot.eventId ? [slot.eventId] : [])))];
     return [
       {
         matchupId: matchup.id,
@@ -421,6 +434,7 @@ export default async function Home() {
         opponentTeamName: matchup.opponentTeamName,
         status: matchup.status,
         showMarkFinal: allLinkedEventsFinal(linkedEventStatuses),
+        eventIds,
       },
     ];
   });

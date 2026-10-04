@@ -6,7 +6,13 @@ import { useTransition } from "react";
 import { markFantasyMatchupFinal } from "./fantasy/actions";
 import type { FantasyMatchupPaneItem } from "./types";
 
-export function FantasyPane({ items }: { items: FantasyMatchupPaneItem[] }) {
+export function FantasyPane({
+  items,
+  onSelectEvent,
+}: {
+  items: FantasyMatchupPaneItem[];
+  onSelectEvent: (eventId: string) => void;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -27,25 +33,35 @@ export function FantasyPane({ items }: { items: FantasyMatchupPaneItem[] }) {
       </div>
       {items.length === 0 && <p className="text-xs text-neutral-500">No active fantasy matchups.</p>}
       <ul className="space-y-2">
-        {items.map((item) => (
-          <li key={item.matchupId} className="rounded border border-neutral-800 p-2">
-            <p className="text-xs font-medium text-neutral-100">{item.leagueName}</p>
-            <p className="text-xs text-neutral-400">
-              {item.userTeamName} vs {item.opponentTeamName}
-              {item.week ? ` · Week ${item.week}` : ""}
-            </p>
-            {item.showMarkFinal && (
+        {items.map((item) => {
+          const hasEvent = item.eventIds.length > 0;
+          return (
+            <li key={item.matchupId} className="rounded border border-neutral-800 p-2">
               <button
                 type="button"
-                disabled={isPending}
-                onClick={() => onMarkFinal(item.matchupId)}
-                className="mt-1 rounded bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-900 disabled:opacity-50"
+                disabled={!hasEvent}
+                onClick={() => hasEvent && onSelectEvent(item.eventIds[0])}
+                className={`block w-full text-left ${hasEvent ? "cursor-pointer" : "cursor-default"}`}
               >
-                Mark Final
+                <p className="text-xs font-medium text-neutral-100">{item.leagueName}</p>
+                <p className="text-xs text-neutral-400">
+                  {item.userTeamName} vs {item.opponentTeamName}
+                  {item.week ? ` · Week ${item.week}` : ""}
+                </p>
               </button>
-            )}
-          </li>
-        ))}
+              {item.showMarkFinal && (
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => onMarkFinal(item.matchupId)}
+                  className="mt-1 rounded bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-900 disabled:opacity-50"
+                >
+                  Mark Final
+                </button>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </aside>
   );
