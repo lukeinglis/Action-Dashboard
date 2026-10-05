@@ -201,6 +201,8 @@ export interface TicketRow {
   user_id: string;
   name: string | null;
   generated_name: string | null;
+  code: string | null;
+  color: string | null;
   sportsbook: string | null;
   sportsbook_ticket_id: string | null;
   stake_cents: number;
@@ -290,6 +292,8 @@ export function toTicket(row: TicketRow): Ticket {
     userId: row.user_id,
     name: row.name,
     generatedName: row.generated_name,
+    code: row.code,
+    color: row.color,
     sportsbook: row.sportsbook,
     sportsbookTicketId: row.sportsbook_ticket_id,
     stakeCents: row.stake_cents,

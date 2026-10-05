@@ -13,8 +13,8 @@ import {
 import {
   SortableContext,
   arrayMove,
+  rectSortingStrategy,
   sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { reorderTicket } from "./actions";
 import { TicketCard } from "./TicketCard";
@@ -59,8 +59,8 @@ export function TicketList({ items: initialItems }: { items: TicketWithStatus[] 
       collisionDetection={closestCenter}
       onDragEnd={handleDragEnd}
     >
-      <SortableContext items={items.map((i) => i.ticket.id)} strategy={verticalListSortingStrategy}>
-        <div className="space-y-3">
+      <SortableContext items={items.map((i) => i.ticket.id)} strategy={rectSortingStrategy}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {items.map((item) => (
             <TicketCard
               key={item.ticket.id}

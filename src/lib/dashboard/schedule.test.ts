@@ -73,6 +73,34 @@ describe("isScheduleRailEligible", () => {
     ).toBe(true);
   });
 
+  it("keeps a kicked-off event on the rail when the window opens at now", () => {
+    // Reproduces the live bug: the default View uses pastHours: 0, so a 1pm
+    // game sits outside the window from 1:01pm onward.
+    const openAtNow = { start: now, end: new Date("2026-09-28T10:00:00Z") };
+    expect(
+      isScheduleRailEligible(
+        { id: "e1", status: "scheduled", startTimeUtc: "2026-09-21T09:00:00Z", isPinned: false, exposureCount: 1 },
+        openAtNow,
+        now,
+        TZ,
+        4,
+      ),
+    ).toBe(true);
+  });
+
+  it("drops an unfinished event that started before the most recent rollover", () => {
+    const openAtNow = { start: now, end: new Date("2026-09-28T10:00:00Z") };
+    expect(
+      isScheduleRailEligible(
+        { id: "e1", status: "scheduled", startTimeUtc: "2026-09-20T18:00:00Z", isPinned: false, exposureCount: 1 },
+        openAtNow,
+        now,
+        TZ,
+        4,
+      ),
+    ).toBe(false);
+  });
+
   it("excludes an exposed event that went final on a prior day", () => {
     expect(
       isScheduleRailEligible(

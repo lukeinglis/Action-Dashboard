@@ -45,6 +45,7 @@ export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
   const userId = await requireUserId(supabase);
   const ticket = await createTicketLib(supabase, userId, input);
   revalidatePath("/tickets");
+  revalidatePath("/");
   return ticket;
 }
 
@@ -53,6 +54,7 @@ export async function updateTicket(ticketId: string, input: UpdateTicketInput): 
   await requireUserId(supabase);
   await updateTicketLib(supabase, ticketId, input);
   revalidatePath("/tickets");
+  revalidatePath("/");
 }
 
 export async function setManualTicketStatus(ticketId: string, status: TicketStatus | null): Promise<void> {
@@ -60,6 +62,7 @@ export async function setManualTicketStatus(ticketId: string, status: TicketStat
   await requireUserId(supabase);
   await setManualTicketStatusLib(supabase, ticketId, status);
   revalidatePath("/tickets");
+  revalidatePath("/");
 }
 
 export async function reorderTicket(
@@ -71,6 +74,7 @@ export async function reorderTicket(
   await requireUserId(supabase);
   const sortKey = await reorderTicketLib(supabase, ticketId, beforeSortKey, afterSortKey);
   revalidatePath("/tickets");
+  revalidatePath("/");
   return sortKey;
 }
 
@@ -79,6 +83,7 @@ export async function deleteTicket(ticketId: string): Promise<void> {
   await requireUserId(supabase);
   await deleteTicketLib(supabase, ticketId);
   revalidatePath("/tickets");
+  revalidatePath("/");
 }
 
 export async function createBetLeg(input: CreateBetLegInput): Promise<BetLeg> {
@@ -86,6 +91,7 @@ export async function createBetLeg(input: CreateBetLegInput): Promise<BetLeg> {
   const userId = await requireUserId(supabase);
   const leg = await createBetLegLib(supabase, userId, input);
   revalidatePath("/tickets");
+  revalidatePath("/");
   return leg;
 }
 
@@ -94,6 +100,7 @@ export async function updateBetLeg(betLegId: string, input: UpdateBetLegInput): 
   await requireUserId(supabase);
   await updateBetLegLib(supabase, betLegId, input);
   revalidatePath("/tickets");
+  revalidatePath("/");
 }
 
 export async function setManualLegStatus(betLegId: string, status: LegSettlement | null): Promise<void> {
@@ -101,6 +108,7 @@ export async function setManualLegStatus(betLegId: string, status: LegSettlement
   await requireUserId(supabase);
   await setManualLegStatusLib(supabase, betLegId, status);
   revalidatePath("/tickets");
+  revalidatePath("/");
 }
 
 export async function setManualLegLiveState(
@@ -112,6 +120,7 @@ export async function setManualLegLiveState(
   await requireUserId(supabase);
   await setManualLegLiveStateLib(supabase, betLegId, liveState, liveDetail);
   revalidatePath("/tickets");
+  revalidatePath("/");
 }
 
 export async function deleteBetLeg(betLegId: string): Promise<void> {
@@ -119,6 +128,7 @@ export async function deleteBetLeg(betLegId: string): Promise<void> {
   await requireUserId(supabase);
   await deleteBetLegLib(supabase, betLegId);
   revalidatePath("/tickets");
+  revalidatePath("/");
 }
 
 export async function linkBetLegEvent(
@@ -130,6 +140,7 @@ export async function linkBetLegEvent(
   const userId = await requireUserId(supabase);
   const link = await linkBetLegEventLib(supabase, userId, betLegId, eventId, matchMethod);
   revalidatePath("/tickets");
+  revalidatePath("/");
   return link;
 }
 
@@ -138,6 +149,7 @@ export async function unlinkBetLegEvent(betLegEventId: string): Promise<void> {
   await requireUserId(supabase);
   await unlinkBetLegEventLib(supabase, betLegEventId);
   revalidatePath("/tickets");
+  revalidatePath("/");
 }
 
 export async function setBetLegSubject(input: SetBetLegSubjectInput): Promise<BetLegSubject> {
@@ -145,6 +157,7 @@ export async function setBetLegSubject(input: SetBetLegSubjectInput): Promise<Be
   const userId = await requireUserId(supabase);
   const subject = await setBetLegSubjectLib(supabase, userId, input);
   revalidatePath("/tickets");
+  revalidatePath("/");
   return subject;
 }
 
@@ -153,6 +166,7 @@ export async function setManualSubjectDirection(subjectId: string, direction: Ro
   await requireUserId(supabase);
   await setManualSubjectDirectionLib(supabase, subjectId, direction);
   revalidatePath("/tickets");
+  revalidatePath("/");
 }
 
 export async function removeBetLegSubject(subjectId: string): Promise<void> {
@@ -160,4 +174,5 @@ export async function removeBetLegSubject(subjectId: string): Promise<void> {
   await requireUserId(supabase);
   await removeBetLegSubjectLib(supabase, subjectId);
   revalidatePath("/tickets");
+  revalidatePath("/");
 }
