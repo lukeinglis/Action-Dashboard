@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { EventDetailData, EventDetailDfsSlot, EventDetailFantasySlot } from "./types";
+import { TicketChip } from "./components/TicketChip";
 
 function rosterSlotBadgeClass(label: string): string {
   return label === "MIXED" ? "bg-amber-900/40 text-amber-300" : "bg-neutral-800 text-neutral-300";
@@ -69,11 +70,12 @@ export function EventDetail({ data }: { data: EventDetailData }) {
                 leg.dead ? "border-neutral-900 opacity-60" : "border-neutral-800"
               }`}
             >
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-neutral-100">{leg.description}</span>
-                <span className="text-xs text-neutral-500">{leg.settlement}</span>
+              <div className="flex items-center justify-between gap-2 text-sm">
+                <span className="min-w-0 flex-1 text-neutral-100">{leg.description}</span>
+                <span className="shrink-0 text-xs text-neutral-500">{leg.settlement}</span>
               </div>
-              <p className="mt-0.5 text-xs text-neutral-500">
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-neutral-500">
+                <TicketChip code={leg.ticketCode} color={leg.ticketColor} />
                 {leg.ticketName} · {leg.ticketStatus}
               </p>
               {leg.subjects.length > 0 && (

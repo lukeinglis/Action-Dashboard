@@ -34,6 +34,16 @@ export function isScheduleRailEligible(
   const start = event.startTimeUtc ? new Date(event.startTimeUtc) : null;
   const end = event.endTimeUtc ? new Date(event.endTimeUtc) : null;
 
+  // A game that has kicked off but isn't finished stays on the rail for the
+  // rest of the day. Without this, a slate vanishes as it starts: the default
+  // date window opens at `now`, and nothing sets `in_progress` until provider
+  // refresh exists (Phase 6), so status alone can't carry it.
+  const unfinished = !event.status || !FINALIZED_STATUSES.includes(event.status);
+  if (start && unfinished && start.getTime() <= now.getTime()) {
+    const dayStart = mostRecentRollover(now, timeZone, rolloverHour);
+    if (start.getTime() >= dayStart.getTime()) return true;
+  }
+
   const overlapsWindow =
     (start && isWithinRange(start, dateWindow)) ||
     (end && isWithinRange(end, dateWindow)) ||

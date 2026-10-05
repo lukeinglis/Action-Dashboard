@@ -30,7 +30,10 @@ export function deepEqual(a: unknown, b: unknown): boolean {
 
 export function defaultViewFilters(): DashboardViewFilters {
   return {
-    dateWindow: { kind: "rolling", pastHours: 0, futureHours: 168 },
+    // pastHours covers a full slate already in progress. At 0 (the original
+    // PRD value) a game selected at 1pm falls outside its own View's window by
+    // 1:01pm, so restore drops the selection back to All Active Tickets.
+    dateWindow: { kind: "rolling", pastHours: 12, futureHours: 168 },
     includePinned: true,
   };
 }

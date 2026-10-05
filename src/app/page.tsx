@@ -18,6 +18,7 @@ import { ticketSection } from "@/lib/dashboard/active-tickets";
 import { allLinkedEventsFinal, fantasyDfsSection } from "@/lib/dashboard/active-fantasy-dfs";
 import { buildWhatDoINeed, relevantWhatDoINeedEntries, type OpenLegForPane } from "@/lib/dashboard/what-do-i-need";
 import { isLegLive, nextEvent } from "@/lib/tickets/bet-leg-events";
+import { resolveTicketCode, resolveTicketColor } from "@/lib/tickets/ticket-code";
 import { effectiveTicketStatus, legSettlement } from "@/lib/betting/derived-status";
 import { displayedAwayScore, displayedClock, displayedHomeScore, displayedPeriod, displayedStatus } from "@/lib/events/overrides";
 import {
@@ -59,6 +60,7 @@ import type {
   EventDetailLeg,
   EventDetailSubject,
   FantasyMatchupPaneItem,
+  PaneRosterPlayer,
   ScheduleEventItem,
   WhatDoINeedItem,
 } from "./types";
@@ -379,6 +381,8 @@ export default async function Home() {
         legId: leg.id,
         ticketId: ticket.id,
         ticketName: ticket.name ?? ticket.generatedName ?? ticket.sportsbook ?? "Ticket",
+        ticketCode: resolveTicketCode(ticket),
+        ticketColor: resolveTicketColor(ticket),
         ticketStatus,
         description: leg.selection ?? leg.rawDescription ?? leg.marketType,
         settlement,
@@ -421,6 +425,18 @@ export default async function Home() {
     subjects: e.subjects,
   }));
 
+  function toPaneRoster(
+    slots: { id: string; slot: string; playerName: string; eventId?: string | null }[],
+  ): PaneRosterPlayer[] {
+    return slots.map((slot) => ({
+      slotId: slot.id,
+      slot: slot.slot,
+      playerName: slot.playerName,
+      eventId: slot.eventId ?? null,
+      eventName: slot.eventId ? eventById.get(slot.eventId)?.name ?? null : null,
+    }));
+  }
+
   // Fantasy / DFS context panes (docs/PRD.md section 8, 65): active matchups/entries
   // only, with the "Mark Final" prompt shown once every linked Event has gone final.
   // Status itself never changes automatically — only the prompt is derived here.
@@ -444,6 +460,8 @@ export default async function Home() {
         status: matchup.status,
         showMarkFinal: allLinkedEventsFinal(linkedEventStatuses),
         eventIds,
+        userRoster: toPaneRoster(matchupSlots.filter((slot) => slot.side === "user")),
+        opponentRoster: toPaneRoster(matchupSlots.filter((slot) => slot.side === "opponent")),
       },
     ];
   });
@@ -452,7 +470,8 @@ export default async function Home() {
     const section = fantasyDfsSection(entry.status, entry.finalizedAt, now, timezone, rolloverHour);
     if (section !== "active") return [];
     const lineup = dfsLineupById.get(entry.dfsLineupId);
-    const linkedEventStatuses = (dfsLineupSlotsByLineupId.get(entry.dfsLineupId) ?? []).map((slot) => {
+    const lineupSlots = dfsLineupSlotsByLineupId.get(entry.dfsLineupId) ?? [];
+    const linkedEventStatuses = lineupSlots.map((slot) => {
       const e = slot.eventId ? eventById.get(slot.eventId) : undefined;
       return e ? displayedStatus(e) : null;
     });
@@ -465,6 +484,7 @@ export default async function Home() {
         contestName: entry.contestName ?? null,
         status: entry.status,
         showMarkFinal: allLinkedEventsFinal(linkedEventStatuses),
+        roster: toPaneRoster(lineupSlots),
       },
     ];
   });

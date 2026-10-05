@@ -77,6 +77,7 @@ export async function createEvent(
   }
 
   revalidatePath("/events");
+  revalidatePath("/");
   return { status: "created", event: toEvent(created as EventRow) };
 }
 
@@ -85,6 +86,7 @@ export async function mergeEvents(sourceEventId: string, targetEventId: string):
   await requireUserId(supabase);
   await mergeEventInto(supabase, sourceEventId, targetEventId);
   revalidatePath("/events");
+  revalidatePath("/");
 }
 
 export async function setEventOverride(
@@ -95,6 +97,7 @@ export async function setEventOverride(
   await requireUserId(supabase);
   await setManualOverride(supabase, eventId, fields);
   revalidatePath("/events");
+  revalidatePath("/");
 }
 
 export async function returnEventFieldToAutomatic(
@@ -105,6 +108,7 @@ export async function returnEventFieldToAutomatic(
   await requireUserId(supabase);
   await returnFieldToAutomatic(supabase, eventId, field);
   revalidatePath("/events");
+  revalidatePath("/");
 }
 
 export async function clearAllEventOverrides(eventId: string): Promise<void> {
@@ -112,6 +116,7 @@ export async function clearAllEventOverrides(eventId: string): Promise<void> {
   await requireUserId(supabase);
   await clearAllOverrides(supabase, eventId);
   revalidatePath("/events");
+  revalidatePath("/");
 }
 
 /** Hard-deletes an Event. Throws EventLinkedError if a BetLeg still links to it. */
@@ -120,6 +125,7 @@ export async function deleteEvent(eventId: string): Promise<void> {
   await requireUserId(supabase);
   await deleteEventLib(supabase, eventId);
   revalidatePath("/events");
+  revalidatePath("/");
 }
 
 /** Removes every BetLeg link to this Event, clearing the way to delete it. */
@@ -128,4 +134,5 @@ export async function unlinkAllEventBetLegs(eventId: string): Promise<void> {
   await requireUserId(supabase);
   await unlinkAllEventLinks(supabase, eventId);
   revalidatePath("/events");
+  revalidatePath("/");
 }

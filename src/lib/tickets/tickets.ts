@@ -66,6 +66,8 @@ export async function createTicket(
 
 export interface UpdateTicketInput {
   name?: string | null;
+  code?: string | null;
+  color?: string | null;
   sportsbook?: string | null;
   sportsbookTicketId?: string | null;
   stakeCents?: number;
@@ -87,6 +89,8 @@ export async function updateTicket(
 ): Promise<void> {
   const update: Record<string, unknown> = {};
   if (input.name !== undefined) update.name = input.name;
+  if (input.code !== undefined) update.code = input.code;
+  if (input.color !== undefined) update.color = input.color;
   if (input.sportsbook !== undefined) update.sportsbook = input.sportsbook;
   if (input.sportsbookTicketId !== undefined) update.sportsbook_ticket_id = input.sportsbookTicketId;
   if (input.stakeCents !== undefined) update.stake_cents = input.stakeCents;

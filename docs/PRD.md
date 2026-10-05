@@ -1959,7 +1959,8 @@ interface DashboardView {
     density: "comfortable" | "compact"
     activeWorkspace: "tickets" | "event"
     selectedEventId?: string
-    openPane?: string
+    expandedEventIds?: string[]
+    openPanes?: ("what_do_i_need" | "fantasy" | "dfs")[]
     scheduleGrouping: "state" | "nfl_window" | "chronological"
   }
 

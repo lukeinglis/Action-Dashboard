@@ -4,6 +4,7 @@
 // refetch, so interactions stay instant.
 
 import type { RootingLabel } from "@/lib/dashboard/exposure";
+import type { TicketColor } from "@/lib/tickets/ticket-code";
 import type { DFSEntryStatus, EventStatus, FantasyMatchupStatus, RosterSlotSide, TicketStatus } from "@/lib/types/domain";
 import type { TicketWithStatus } from "./tickets/types";
 
@@ -40,6 +41,8 @@ export interface EventDetailLeg {
   legId: string;
   ticketId: string;
   ticketName: string;
+  ticketCode: string;
+  ticketColor: TicketColor;
   ticketStatus: TicketStatus;
   description: string;
   settlement: string;
@@ -83,6 +86,19 @@ export interface WhatDoINeedItem {
   subjects: { name: string; label: RootingLabel }[];
 }
 
+/**
+ * A roster entry as the context panes show it. `eventId` is null until the
+ * player's Event is matched, which is also why the pane shows the Event name:
+ * an unmatched player is invisible in the Schedule Rail.
+ */
+export interface PaneRosterPlayer {
+  slotId: string;
+  slot: string;
+  playerName: string;
+  eventId: string | null;
+  eventName: string | null;
+}
+
 /** Active FantasyMatchup for the Fantasy context pane; Mark Final (docs/PRD.md section 8). */
 export interface FantasyMatchupPaneItem {
   matchupId: string;
@@ -94,6 +110,8 @@ export interface FantasyMatchupPaneItem {
   showMarkFinal: boolean;
   /** Distinct Event ids linked via this matchup's roster slots, for click-through to Event Detail. */
   eventIds: string[];
+  userRoster: PaneRosterPlayer[];
+  opponentRoster: PaneRosterPlayer[];
 }
 
 /** Active DFSEntry for the DFS context pane; Mark Final (docs/PRD.md section 8). */
@@ -105,4 +123,5 @@ export interface DfsEntryPaneItem {
   contestName: string | null;
   status: DFSEntryStatus;
   showMarkFinal: boolean;
+  roster: PaneRosterPlayer[];
 }

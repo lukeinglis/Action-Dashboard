@@ -28,7 +28,7 @@ describe("sortKeyBetween", () => {
   });
 
   it("repeated midpoints never collide, even after many inserts at the same spot", () => {
-    let lower = "a";
+    const lower = "a";
     let upper = "b";
     const seen = new Set([lower, upper]);
     for (let i = 0; i < 50; i++) {

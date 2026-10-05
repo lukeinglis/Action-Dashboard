@@ -135,6 +135,11 @@ export interface Ticket {
   name?: string | null;
   generatedName?: string | null;
 
+  /** Short cross-reference handle; derived from the name when null. */
+  code?: string | null;
+  /** Palette key from TICKET_COLORS; derived from code + id when null. */
+  color?: string | null;
+
   sportsbook?: string | null;
   sportsbookTicketId?: string | null;
 
@@ -263,6 +268,7 @@ export type DashboardSection = "active" | "settled" | "final";
 export type DashboardDomain = "betting" | "fantasy" | "dfs";
 export type ScheduleGrouping = "state" | "nfl_window" | "chronological";
 export type ActiveWorkspace = "tickets" | "event";
+export type DashboardPane = "what_do_i_need" | "fantasy" | "dfs";
 
 export interface DashboardViewFilters {
   domains?: DashboardDomain[];
@@ -280,7 +286,10 @@ export interface DashboardViewLayout {
   density: "comfortable" | "compact";
   activeWorkspace: ActiveWorkspace;
   selectedEventId?: string;
-  openPane?: string;
+  /** Schedule Rail rows expanded in place to reveal their nested exposure. */
+  expandedEventIds?: string[];
+  /** Context panes stacked in the right column; several can be open at once. */
+  openPanes?: DashboardPane[];
   scheduleGrouping: ScheduleGrouping;
 }
 

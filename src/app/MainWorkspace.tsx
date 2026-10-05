@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { formatCents } from "@/lib/betting/money";
 import { sortTickets } from "@/lib/dashboard/active-tickets";
 import type { ActiveWorkspace, SortMode } from "@/lib/types/domain";
 import { TicketList } from "./tickets/TicketList";
+import { TicketCardBody } from "./tickets/TicketCardBody";
+import { Panel, PanelBody, PanelHeader } from "./components/Panel";
 import type { DashboardTicketItem, EventDetailData } from "./types";
 import { EventDetail } from "./EventDetail";
 
@@ -46,12 +48,23 @@ export function MainWorkspace({
 }: Props) {
   if (activeWorkspace === "event" && selectedEventDetail) {
     return (
-      <main className="space-y-3">
-        <button type="button" onClick={onBackToTickets} className="text-sm text-neutral-300 underline">
-          ← All Active Tickets
-        </button>
-        <EventDetail data={selectedEventDetail} />
-      </main>
+      <Panel>
+        <PanelHeader
+          title={selectedEventDetail.event.name}
+          action={
+            <button
+              type="button"
+              onClick={onBackToTickets}
+              className="text-[11px] text-neutral-400 hover:text-neutral-100"
+            >
+              ← All Active Tickets
+            </button>
+          }
+        />
+        <PanelBody>
+          <EventDetail data={selectedEventDetail} />
+        </PanelBody>
+      </Panel>
     );
   }
 
@@ -75,97 +88,71 @@ function AllActiveTickets({
   const sortedActive = useMemo(() => sortTickets(active.map(toSortable), sortMode), [active, sortMode]);
 
   return (
-    <main className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-neutral-100">All Active Tickets</h2>
-        <select
-          value={sortMode}
-          onChange={(e) => onSortModeChange(e.target.value as SortMode)}
-          className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs text-neutral-300"
-        >
-          {SORT_MODES.map((m) => (
-            <option key={m.value} value={m.value}>
-              Sort: {m.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {sortedActive.length === 0 && (
-        <p className="text-sm text-neutral-500">
-          No active tickets.{" "}
-          <Link href="/inbox" className="text-neutral-300 underline">
-            Add a pick
-          </Link>{" "}
-          to get started.
-        </p>
-      )}
-
-      {sortMode === "manual" ? (
-        <TicketList items={active} />
-      ) : (
-        <div className="space-y-3">
-          {sortedActive.map((item) => (
-            <StaticTicketRow key={item.ticket.id} item={item} />
-          ))}
-        </div>
-      )}
-
-      {settled.length > 0 && (
-        <div>
-          <button
-            type="button"
-            onClick={() => setSettledOpen((v) => !v)}
-            className="text-sm font-semibold text-neutral-100 underline"
+    <Panel>
+      <PanelHeader
+        title="All Active Tickets"
+        count={active.length}
+        action={
+          <select
+            aria-label="Ticket sort"
+            value={sortMode}
+            onChange={(e) => onSortModeChange(e.target.value as SortMode)}
+            className="rounded border border-neutral-800 bg-neutral-900 px-1.5 py-0.5 text-[11px] text-neutral-400"
           >
-            Settled ({settled.length}) {settledOpen ? "▾" : "▸"}
-          </button>
-          {settledOpen && (
-            <div className="mt-2 space-y-3">
-              {settled.map((item) => (
-                <StaticTicketRow key={item.ticket.id} item={item} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </main>
+            {SORT_MODES.map((m) => (
+              <option key={m.value} value={m.value}>
+                Sort: {m.label}
+              </option>
+            ))}
+          </select>
+        }
+      />
+      <PanelBody className="space-y-4">
+        {sortedActive.length === 0 && (
+          <p className="text-sm text-neutral-500">
+            No active tickets.{" "}
+            <Link href="/inbox" className="text-neutral-300 underline">
+              Add a pick
+            </Link>{" "}
+            to get started.
+          </p>
+        )}
+
+        {sortMode === "manual" ? <TicketList items={active} /> : <TicketGrid items={sortedActive} />}
+
+        {settled.length > 0 && (
+          <div className="border-t border-neutral-900 pt-3">
+            <button
+              type="button"
+              onClick={() => setSettledOpen((v) => !v)}
+              aria-expanded={settledOpen}
+              className="text-xs font-semibold uppercase tracking-wide text-neutral-500 hover:text-neutral-300"
+            >
+              {settledOpen ? "▾" : "▸"} Settled <span className="tabular-nums">{settled.length}</span>
+            </button>
+            {settledOpen && (
+              <div className="mt-2">
+                <TicketGrid items={settled} />
+              </div>
+            )}
+          </div>
+        )}
+      </PanelBody>
+    </Panel>
   );
 }
 
-function StaticTicketRow({ item }: { item: DashboardTicketItem }) {
-  const { ticket, legCount, status, legs } = item;
+/**
+ * Non-draggable grid. Deletion is handled by revalidation rather than local
+ * state, since these lists are re-derived on the server for every sort mode.
+ */
+function TicketGrid({ items }: { items: DashboardTicketItem[] }) {
+  const router = useRouter();
   return (
-    <Link
-      href={`/tickets/${ticket.id}`}
-      className="block rounded-lg border border-neutral-800 p-4 hover:border-neutral-700"
-    >
-      <div className="flex items-center justify-between">
-        <span className="font-medium text-neutral-100">
-          {ticket.name ?? ticket.generatedName ?? ticket.sportsbook ?? "Ticket"}
-        </span>
-        <span className="rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-300">{status}</span>
-      </div>
-      <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-neutral-300">
-        <span>Stake {formatCents(ticket.stakeCents)}</span>
-        <span>To Win {formatCents(ticket.toWinCents)}</span>
-        <span>
-          {legCount} leg{legCount === 1 ? "" : "s"}
-        </span>
-      </div>
-      {legs.length > 0 && (
-        <ul className="mt-2 space-y-1">
-          {legs.map((leg) => (
-            <li key={leg.id} className="flex items-center justify-between gap-2 text-xs text-neutral-400">
-              <span className="truncate">
-                {leg.selection ?? leg.rawDescription ?? leg.marketType}
-                {leg.oddsAmerican != null ? ` (${leg.oddsAmerican > 0 ? "+" : ""}${leg.oddsAmerican})` : ""}
-              </span>
-              <span className="shrink-0 rounded bg-neutral-800 px-1.5 py-0.5 text-neutral-400">{leg.settlement}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Link>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {items.map((item) => (
+        <TicketCardBody key={item.ticket.id} item={item} onDeleted={() => router.refresh()} />
+      ))}
+    </div>
   );
 }
