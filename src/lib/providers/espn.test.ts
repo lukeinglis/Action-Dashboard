@@ -93,6 +93,8 @@ describe("normalizeScoreboard", () => {
       startTimeTbd: false,
       homeTeamProviderId: "29",
       awayTeamProviderId: "8",
+      homeTeamAbbreviation: "CAR",
+      awayTeamAbbreviation: "DET",
       status: "in_progress",
       homeScore: 29,
       awayScore: 19,
@@ -128,6 +130,26 @@ describe("normalizeScoreboard", () => {
     expect(event.status).toBe("in_progress");
     expect(event.period).toBe("END Q3");
     expect(event.clock).toBeUndefined();
+  });
+
+  it("withholds scores before kickoff, where ESPN reports 0-0", () => {
+    const scheduled = {
+      ...liveGame,
+      status: { type: { name: "STATUS_SCHEDULED", state: "pre" } },
+      competitions: [
+        {
+          competitors: [
+            { homeAway: "home", score: "0", team: { id: "18", abbreviation: "NO" } },
+            { homeAway: "away", score: "0", team: { id: "1", abbreviation: "ATL" } },
+          ],
+        },
+      ],
+    };
+    const [event] = normalizeScoreboard({ events: [scheduled] }, "nfl");
+
+    expect(event.status).toBe("scheduled");
+    expect(event.homeScore).toBeUndefined();
+    expect(event.awayScore).toBeUndefined();
   });
 
   it("marks a start time as TBD when ESPN omits the date", () => {

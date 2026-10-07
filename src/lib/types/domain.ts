@@ -105,6 +105,28 @@ export interface ProviderMapping {
   updatedAt: string;
 }
 
+/** Freshness per provider + sport, never one global timestamp (§21). */
+export interface SportsRefreshState {
+  id: string;
+  userId: string;
+
+  providerKey: string;
+  sport: string;
+
+  inProgressSince?: string | null;
+
+  lastAttemptAt?: string | null;
+  lastSuccessAt?: string | null;
+  lastError?: string | null;
+
+  lastRequestCount?: number | null;
+  requestsTodayCount: number;
+  requestsTodayDate: string;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Phase 2: Betting core. Mirrors
 // supabase/migrations/20260930162146_create_phase2_betting_core.sql and
 // docs/PRD.md sections 24-33, 63-63.1.

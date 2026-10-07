@@ -31,6 +31,7 @@ import type {
   ProviderMapping,
   RootingDirection,
   RosterSlotSide,
+  SportsRefreshState,
   Team,
   Ticket,
   TicketStatus,
@@ -108,6 +109,22 @@ export interface ProviderMappingRow {
   provider_id: string;
   match_method: MatchMethod;
   locked: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SportsRefreshStateRow {
+  id: string;
+  user_id: string;
+  provider_key: string;
+  sport: string;
+  in_progress_since: string | null;
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  last_request_count: number | null;
+  requests_today_count: number;
+  requests_today_date: string;
   created_at: string;
   updated_at: string;
 }
@@ -191,6 +208,24 @@ export function toProviderMapping(row: ProviderMappingRow): ProviderMapping {
     providerId: row.provider_id,
     matchMethod: row.match_method,
     locked: row.locked,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function toSportsRefreshState(row: SportsRefreshStateRow): SportsRefreshState {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    providerKey: row.provider_key,
+    sport: row.sport,
+    inProgressSince: row.in_progress_since,
+    lastAttemptAt: row.last_attempt_at,
+    lastSuccessAt: row.last_success_at,
+    lastError: row.last_error,
+    lastRequestCount: row.last_request_count,
+    requestsTodayCount: row.requests_today_count,
+    requestsTodayDate: row.requests_today_date,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
