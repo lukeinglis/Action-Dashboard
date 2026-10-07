@@ -13,6 +13,11 @@ export interface ProviderEvent {
   endTimeUtc?: string;
   homeTeamProviderId?: string;
   awayTeamProviderId?: string;
+  /** Bootstrap a team mapping on the first refresh, before one exists (§20.2). */
+  homeTeamAbbreviation?: string;
+  awayTeamAbbreviation?: string;
+  homeTeamName?: string;
+  awayTeamName?: string;
   status?: string;
   homeScore?: number;
   awayScore?: number;

@@ -102,7 +102,7 @@ interface EspnCompetitor {
   homeAway?: string;
   score?: string;
   order?: number;
-  team?: { id?: string; abbreviation?: string };
+  team?: { id?: string; abbreviation?: string; displayName?: string };
   athlete?: { id?: string; displayName?: string };
 }
 
@@ -160,6 +160,9 @@ export function normalizeScoreboard(payload: unknown, sport: string): ProviderEv
 
     const period = formatPeriod(sport, status?.period, typeName);
     const displayClock = status?.displayClock;
+    // A game that hasn't started reports "0"-"0", which would otherwise be
+    // written as a real 0-0 scoreline before kickoff. Same for a postponement.
+    const hasScores = normalizedStatus === "in_progress" || normalizedStatus === "final";
 
     out.push({
       providerEventId: event.id,
@@ -171,9 +174,13 @@ export function normalizeScoreboard(payload: unknown, sport: string): ProviderEv
       endTimeUtc: event.endDate,
       homeTeamProviderId: home?.team?.id,
       awayTeamProviderId: away?.team?.id,
+      homeTeamAbbreviation: home?.team?.abbreviation,
+      awayTeamAbbreviation: away?.team?.abbreviation,
+      homeTeamName: home?.team?.displayName,
+      awayTeamName: away?.team?.displayName,
       status: normalizedStatus,
-      homeScore: parseScore(home?.score),
-      awayScore: parseScore(away?.score),
+      homeScore: hasScores ? parseScore(home?.score) : undefined,
+      awayScore: hasScores ? parseScore(away?.score) : undefined,
       // Period and clock only mean anything mid-game; a final game reports 0:00,
       // and so does a game between quarters, where the period label says "END Q3".
       period: inProgress ? period : undefined,
