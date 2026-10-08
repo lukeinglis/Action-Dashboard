@@ -8,6 +8,7 @@ import type { LegSettlement, TicketStatus } from "@/lib/types/domain";
 import { deleteTicket, setManualLegStatus, setManualTicketStatus, updateBetLeg, updateTicket } from "./actions";
 import { InlineText } from "../components/InlineText";
 import { LegSettlementControl } from "../components/LegSettlementControl";
+import { LiveStateDot } from "../components/LiveStateDot";
 import type { TicketWithStatus } from "./types";
 
 const STATUSES: TicketStatus[] = ["pending", "active", "won", "lost", "void", "cashed_out"];
@@ -88,6 +89,7 @@ export function TicketCardBody({
         <ul className="mt-2 space-y-0.5">
           {visibleLegs.map((leg) => (
             <li key={leg.id} className="flex items-center gap-1.5 text-[11px] text-neutral-400">
+              <LiveStateDot state={leg.liveState} detail={leg.liveDetail} />
               <InlineText
                 ariaLabel="Leg description"
                 value={leg.selection ?? leg.rawDescription ?? leg.marketType}

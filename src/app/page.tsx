@@ -19,7 +19,7 @@ import { allLinkedEventsFinal, fantasyDfsSection } from "@/lib/dashboard/active-
 import { buildWhatDoINeed, relevantWhatDoINeedEntries, type OpenLegForPane } from "@/lib/dashboard/what-do-i-need";
 import { isLegLive, nextEvent } from "@/lib/tickets/bet-leg-events";
 import { resolveTicketCode, resolveTicketColor } from "@/lib/tickets/ticket-code";
-import { effectiveTicketStatus, legSettlement } from "@/lib/betting/derived-status";
+import { effectiveTicketStatus, legSettlement, legLiveState } from "@/lib/betting/derived-status";
 import {
   displayedAwayScore,
   displayedClock,
@@ -335,6 +335,8 @@ export default async function Home() {
           line: l.line ?? null,
           oddsAmerican: l.oddsAmerican ?? null,
           settlement: legSettlement(l),
+        liveState: legLiveState(l),
+        liveDetail: l.liveDetail ?? null,
         })),
       },
     ];

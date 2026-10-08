@@ -1,4 +1,4 @@
-import type { BetLeg, LegSettlement, TicketStatus } from "@/lib/types/domain";
+import type { BetLeg, LegSettlement, LiveLegState, TicketStatus } from "@/lib/types/domain";
 
 // Derived Ticket status. See docs/PRD.md section 27.
 //
@@ -13,6 +13,17 @@ import type { BetLeg, LegSettlement, TicketStatus } from "@/lib/types/domain";
 
 export function legSettlement(leg: Pick<BetLeg, "manualStatus" | "automaticStatus">): LegSettlement {
   return leg.manualStatus ?? leg.automaticStatus ?? "open";
+}
+
+/**
+ * A leg's live state under the same §45 precedence as its settlement: a state
+ * the user set by hand outranks the one refresh computed. "unknown" is the
+ * honest default for a market we cannot read off a scoreline.
+ */
+export function legLiveState(
+  leg: Pick<BetLeg, "manualLiveState" | "automaticLiveState">,
+): LiveLegState {
+  return leg.manualLiveState ?? leg.automaticLiveState ?? "unknown";
 }
 
 export function derivedTicketStatus(

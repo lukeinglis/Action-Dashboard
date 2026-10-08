@@ -75,6 +75,7 @@ export function RefreshControl({ refreshStates, staleOverrideCount, unsupportedS
   }, [lastResult, cooldownMs]);
 
   const lines = freshnessLines(refreshStates, timeZone, lastResult?.results ?? []);
+  const legsUpdated = (lastResult?.results ?? []).reduce((total, r) => total + r.legsUpdated, 0);
   const quota = lastResult?.quota;
   const quotaWarning =
     quota && quota.limit != null && quota.status !== "ok"
@@ -105,6 +106,15 @@ export function RefreshControl({ refreshStates, staleOverrideCount, unsupportedS
 
         {manualOnly.length > 0 && (
           <span className="text-neutral-600">{manualOnly.join(", ")} manual only</span>
+        )}
+
+        {/* §26.1: the answer to "did my tickets move", which is the reason the
+            user pressed the button at all. Silent at zero, since a refresh
+            before kickoff legitimately moves nothing. */}
+        {legsUpdated > 0 && (
+          <span className="text-neutral-400">
+            {legsUpdated} leg{legsUpdated === 1 ? "" : "s"} updated
+          </span>
         )}
 
         {quotaWarning && <span className="text-amber-300">{quotaWarning}</span>}

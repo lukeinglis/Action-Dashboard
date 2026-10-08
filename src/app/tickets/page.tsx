@@ -8,7 +8,7 @@ import {
   type BetLegRow,
   type TicketRow,
 } from "@/lib/db/rows";
-import { effectiveTicketStatus, legSettlement } from "@/lib/betting/derived-status";
+import { effectiveTicketStatus, legSettlement, legLiveState } from "@/lib/betting/derived-status";
 import { isLegLive } from "@/lib/tickets/bet-leg-events";
 import { logout } from "@/app/login/actions";
 import { TicketList } from "./TicketList";
@@ -87,6 +87,8 @@ export default async function TicketsPage() {
         line: l.line ?? null,
         oddsAmerican: l.oddsAmerican ?? null,
         settlement: legSettlement(l),
+        liveState: legLiveState(l),
+        liveDetail: l.liveDetail ?? null,
       })),
     };
   });

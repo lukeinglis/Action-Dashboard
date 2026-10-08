@@ -35,6 +35,14 @@ export interface ApplyProviderEventsResult {
   needsMatch: { providerEventId: string; name: string; candidateEventIds: string[] }[];
   /** Mapped Events the provider stopped reporting. Flagged, never deleted. */
   lostMappingEventIds: string[];
+  /**
+   * Every Event this refresh resolved to, whether or not its values moved.
+   * Unchanged Events are included on purpose: a bet placed since the last
+   * refresh has no live state yet, and its game's score may not have changed in
+   * the meantime. Keying off "changed" alone would leave that leg blank until
+   * the next score.
+   */
+  touchedEventIds: string[];
 }
 
 interface AutomaticFields {
@@ -104,6 +112,7 @@ export async function applyProviderEvents(
       teamMappingsCreated: 0,
       needsMatch: [],
       lostMappingEventIds: [],
+      touchedEventIds: [],
     };
   }
 
@@ -128,6 +137,7 @@ export async function applyProviderEvents(
     teamMappingsCreated: 0,
     needsMatch: [],
     lostMappingEventIds,
+    touchedEventIds: [],
   };
 
   // provider_mappings is unique on both (provider_key, provider_id) and
@@ -171,6 +181,8 @@ export async function applyProviderEvents(
 
     const row = eventRows.get(outcome.eventId);
     if (!row) continue;
+
+    result.touchedEventIds.push(outcome.eventId);
 
     const next = orientAutomaticFields(match, row);
     if (!hasAutomaticChange(next, row)) {
