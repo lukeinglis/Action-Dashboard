@@ -128,6 +128,62 @@ describe("findDuplicateEvents", () => {
     expect(result[0].id).toBe("existing-team");
   });
 
+  it("finds a team-sport duplicate entered with home and away reversed", async () => {
+    // Same two teams, same local date: the same game, however the user typed
+    // the sides. Warning here is what stops a reversed near-duplicate Event
+    // from being created and then competing for the provider match.
+    const supabase = createFakeSupabase({
+      events: [
+        eventRow({
+          id: "existing-team",
+          home_team_id: "home-1",
+          away_team_id: "away-1",
+        }),
+      ],
+    });
+
+    const result = await findDuplicateEvents(
+      supabase as never,
+      {
+        sport: "nfl",
+        name: "TB @ MIN",
+        startTimeUtc: "2026-10-12T17:00:00.000Z",
+        homeTeamId: "away-1",
+        awayTeamId: "home-1",
+      },
+      "America/New_York",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("existing-team");
+  });
+
+  it("does not match a different team pair that shares one team", async () => {
+    const supabase = createFakeSupabase({
+      events: [
+        eventRow({
+          id: "existing-team",
+          home_team_id: "home-1",
+          away_team_id: "away-1",
+        }),
+      ],
+    });
+
+    const result = await findDuplicateEvents(
+      supabase as never,
+      {
+        sport: "nfl",
+        name: "MIN @ SEA",
+        startTimeUtc: "2026-10-12T17:00:00.000Z",
+        homeTeamId: "home-1",
+        awayTeamId: "away-2",
+      },
+      "America/New_York",
+    );
+
+    expect(result).toEqual([]);
+  });
+
   it("does not match a non-duplicate on a different day", async () => {
     const supabase = createFakeSupabase({ events: [eventRow()] });
 

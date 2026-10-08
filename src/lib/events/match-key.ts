@@ -1,5 +1,5 @@
 // Event match-key logic. See docs/PRD.md section 20.2:
-//   team sports:     sport + home team + away team + start date (user tz)
+//   team sports:     sport + both teams (order-independent) + start date (user tz)
 //   non-team sports: sport + league + normalized event name + start date (user tz)
 //
 // The match key is used both for the duplicate-check on manual creation and
@@ -47,7 +47,13 @@ export function buildEventMatchKey(event: MatchKeyInput, timeZone: string): stri
   const isTeamSport = Boolean(event.homeTeamId && event.awayTeamId);
 
   if (isTeamSport) {
-    return ["team", event.sport, event.homeTeamId, event.awayTeamId, localDate].join("|");
+    // The two team ids are sorted, so the key does not depend on which side
+    // the user entered as home. On one local date a pair cannot also meet with
+    // the venues swapped, so orientation adds no discriminating power — while
+    // keying on it made a reversed Event unmatchable against the provider
+    // (and `orientAutomaticFields` already resolves the scoreline).
+    const pair = [event.homeTeamId!, event.awayTeamId!].sort();
+    return ["team", event.sport, ...pair, localDate].join("|");
   }
 
   return [
