@@ -103,10 +103,12 @@ export function normalizeWeekStats(
   }
 
   const out: ProviderPlayerStat[] = [];
+  let playerRows = 0;
 
   for (const [playerId, raw] of Object.entries(payload as Record<string, unknown>)) {
     if (playerId.startsWith("TEAM_")) continue;
     if (raw == null || typeof raw !== "object") continue;
+    playerRows += 1;
 
     const row = raw as Record<string, unknown>;
     const stats: Record<string, number> = {};
@@ -132,7 +134,16 @@ export function normalizeWeekStats(
     });
   }
 
-  if (out.length === 0) {
+  // An empty payload is the honest state of a week before its first kickoff:
+  // Sleeper returns `{}` for a week with no games played, and Thursday evening
+  // is exactly when a user looks at a TNF prop. Reporting that as a failure
+  // would put "player stats unavailable" beside every refresh all week,
+  // crying wolf until the games start.
+  //
+  // Rows that exist but parse to nothing is a different thing entirely — the
+  // payload shape moved under STAT_KEYS — and that stays a failure, because
+  // silently returning no stats would read as "nobody has done anything yet".
+  if (out.length === 0 && playerRows > 0) {
     throw new Error(
       'Sleeper: week stats parsed but no player recorded anything — treating as failure, not "no action"',
     );

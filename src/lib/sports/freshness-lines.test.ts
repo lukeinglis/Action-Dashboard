@@ -32,6 +32,8 @@ function result(overrides: Partial<SportRefreshResult> = {}): SportRefreshResult
     teamMappingsCreated: 0,
     needsMatch: [],
     lostMappingEventIds: [],
+    participantMappingsCreated: 0,
+    playersNeedingMatch: [],
     ...overrides,
   };
 }

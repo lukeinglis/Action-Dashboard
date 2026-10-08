@@ -101,6 +101,44 @@ describe("matchParsedLeg", () => {
     ]);
   });
 
+  it("flags an unknown prop player for creation, since a prop's subject can only be a player", () => {
+    // Dropping this subject discarded both the player and the Over the
+    // direction encodes, and nothing else in the app creates a Participant —
+    // so the prop could never be graded.
+    const match = matchParsedLeg(
+      leg({
+        marketType: "receiving_yards",
+        selection: "CeeDee Lamb Over 99.5",
+        subject: "CeeDee Lamb",
+        overUnder: "over",
+      }),
+      candidates,
+      TZ,
+    );
+    expect(match.subjects).toEqual([
+      {
+        name: "CeeDee Lamb",
+        teamId: undefined,
+        participantId: undefined,
+        matched: false,
+        createParticipant: true,
+        direction: "for",
+      },
+    ]);
+  });
+
+  it("does not offer to create a player for an unmatched team-level subject", () => {
+    // "Some Other Team" could be a team we don't carry or a typo; guessing it
+    // into the participant list would be worse than leaving it for the user.
+    const match = matchParsedLeg(
+      leg({ marketType: "team_total", selection: "Some Other Team Over 20.5", subject: "Some Other Team", overUnder: "over" }),
+      candidates,
+      TZ,
+    );
+    expect(match.subjects[0]).toMatchObject({ matched: false });
+    expect(match.subjects[0].createParticipant).toBeUndefined();
+  });
+
   it("matches teams and the Event by name alone when Sport couldn't be extracted", () => {
     const match = matchParsedLeg(
       leg({

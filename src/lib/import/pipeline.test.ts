@@ -55,6 +55,52 @@ describe("buildImportReview", () => {
     expect(review.tickets[0].duplicateOfTicketId).toBe("ticket-existing");
   });
 
+  it("carries a real DraftKings same-game parlay through to a reviewable payload", () => {
+    // The ticket that first failed to import: DK labels the total "To Pay" and
+    // writes props as "100+", and neither player exists yet. Every one of
+    // those was a hard stop at some point in this pipeline.
+    const review = buildImportReview(
+      `Bet Slip
+Type: 3-Leg Same Game Parlay
+Leg 1:
+Market: spread
+Selection: KC Chiefs +9.5
+Subject: KC Chiefs
+Event: Kansas City Chiefs @ Buffalo Bills
+Sport: football/NFL
+Line: 9.5
+OverUnder: over
+
+Leg 2:
+Market: receiving_yards
+Selection: CeeDee Lamb Over 100+
+Subject: CeeDee Lamb
+Event: Kansas City Chiefs @ Buffalo Bills
+Sport: football/NFL
+Line: 100
+OverUnder: over
+Wager: $10.00
+To Pay: $103.80
+Promo: +50% Parlay Boost`,
+      candidates,
+      [],
+      "America/New_York",
+    );
+
+    const [{ ticket, legMatches }] = review.tickets;
+    expect(ticket.toWinCents).toBe(9380);
+    expect(ticket.legs[1].line).toBe(99.5);
+    expect(legMatches[0].subjects[0]).toMatchObject({ teamId: "team-chiefs", matched: true });
+    // The prop's player is new, so the subject survives review instead of
+    // being dropped along with the Over it carries.
+    expect(legMatches[1].subjects[0]).toMatchObject({
+      name: "CeeDee Lamb",
+      matched: false,
+      createParticipant: true,
+      direction: "for",
+    });
+  });
+
   it("throws SlipParseError on malformed text rather than returning a partial review", () => {
     expect(() => buildImportReview("not a bet slip", candidates, [], "America/New_York")).toThrow(SlipParseError);
   });

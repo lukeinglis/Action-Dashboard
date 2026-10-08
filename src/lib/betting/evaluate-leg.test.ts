@@ -56,9 +56,30 @@ describe("evaluateLeg", () => {
       }
     });
 
-    it("is unknown for a player prop, which a scoreline cannot answer", () => {
+    it("is unknown for a player prop with no stat line supplied", () => {
+      // The player was never mapped to a stats provider, so the scoreline is
+      // all there is — and it says nothing about one receiver.
       expect(
         evaluateLeg({ marketType: "receiving_yards", line: 65.5 }, [{ direction: "for" }], game(21, 17)).liveState,
+      ).toBe("unknown");
+    });
+
+    it("is unknown for a prop market no stat line can answer", () => {
+      // Scoring order is not in a week stat line: a player with one touchdown
+      // may or may not have had the first one.
+      expect(
+        evaluateLeg(
+          { marketType: "first_touchdown", line: 0.5, playerStats: { rushTd: 1 } },
+          [{ direction: "for" }],
+          game(21, 17),
+        ).liveState,
+      ).toBe("unknown");
+    });
+
+    it("is unknown for a prop with no line and none implied", () => {
+      expect(
+        evaluateLeg({ marketType: "receiving_yards", playerStats: { recYards: 41 } }, [{ direction: "for" }], game(21, 17))
+          .liveState,
       ).toBe("unknown");
     });
 
@@ -219,6 +240,136 @@ describe("evaluateLeg", () => {
       expect(
         evaluateLeg({ marketType: "team_total", line: 20.5 }, [{ teamId: HOME, direction: "against" }], game(21, 17)),
       ).toMatchObject({ liveState: "losing" });
+    });
+  });
+
+  describe("player prop", () => {
+    // §26.2 stores Over as "for" on the player and Under as "against".
+    const OVER_PLAYER: EvaluationSubject[] = [{ direction: "for" }];
+    const UNDER_PLAYER: EvaluationSubject[] = [{ direction: "against" }];
+
+    it("is losing for an Over the player has not reached", () => {
+      // Deliberately not "on pace": 41 of 65.5 in the third quarter would lose
+      // if the game ended now, and that is what the dot says. The detail gives
+      // the raw numbers so the user can judge pace themselves.
+      expect(
+        evaluateLeg(
+          { marketType: "receiving_yards", line: 65.5, playerStats: { recYards: 41 } },
+          OVER_PLAYER,
+          game(21, 17),
+        ),
+      ).toEqual({ liveState: "losing", settlement: "open", detail: "41 rec yds of 65.5" });
+    });
+
+    it("is winning once the player passes the number", () => {
+      expect(
+        evaluateLeg(
+          { marketType: "receiving_yards", line: 65.5, playerStats: { recYards: 72 } },
+          OVER_PLAYER,
+          game(21, 17),
+        ),
+      ).toMatchObject({ liveState: "winning", detail: "72 rec yds of 65.5" });
+    });
+
+    it("inverts for an Under", () => {
+      expect(
+        evaluateLeg(
+          { marketType: "receptions", line: 4.5, playerStats: { receptions: 2 } },
+          UNDER_PLAYER,
+          game(21, 17),
+        ),
+      ).toMatchObject({ liveState: "winning", detail: "2 rec of 4.5" });
+    });
+
+    it("sums both halves of a combined-yards prop", () => {
+      expect(
+        evaluateLeg(
+          { marketType: "combined_yards", line: 60, playerStats: { rushYards: 30, recYards: 41 } },
+          OVER_PLAYER,
+          game(21, 17),
+        ),
+      ).toMatchObject({ liveState: "winning", detail: "71 yds of 60" });
+    });
+
+    it("uses the implied line of an anytime touchdown, which books print no number for", () => {
+      expect(
+        evaluateLeg(
+          { marketType: "anytime_touchdown", playerStats: { recTd: 1 } },
+          OVER_PLAYER,
+          game(21, 17),
+        ),
+      ).toMatchObject({ liveState: "winning", detail: "1 TD of 0.5" });
+      expect(
+        evaluateLeg(
+          { marketType: "anytime_touchdown", playerStats: { recTd: 0 } },
+          OVER_PLAYER,
+          game(21, 17),
+        ),
+      ).toMatchObject({ liveState: "losing", detail: "0 TD of 0.5" });
+    });
+
+    it("does not credit a quarterback's passing touchdowns to an anytime scorer", () => {
+      expect(
+        evaluateLeg(
+          { marketType: "anytime_touchdown", playerStats: { passTd: 3 } },
+          OVER_PLAYER,
+          game(21, 17),
+        ),
+      ).toMatchObject({ liveState: "losing" });
+    });
+
+    it("reads a player with no numbers yet as zero, not as missing", () => {
+      // A receiver with no catches really does have zero yards. The red dot is
+      // correct: right now the Over would lose.
+      expect(
+        evaluateLeg(
+          { marketType: "receiving_yards", line: 65.5, playerStats: {} },
+          OVER_PLAYER,
+          game(0, 0),
+        ),
+      ).toMatchObject({ liveState: "losing", detail: "0 rec yds of 65.5" });
+    });
+
+    it("says nothing before kickoff, where a zero would read as losing", () => {
+      // The trap the Event gates exist for: a scheduled game stores no score,
+      // so a player with no stats never shows a red dot pre-game.
+      expect(
+        evaluateLeg(
+          { marketType: "receiving_yards", line: 65.5, playerStats: {} },
+          OVER_PLAYER,
+          game(null, null, "scheduled"),
+        ).liveState,
+      ).toBe("unknown");
+    });
+
+    it("settles the prop at final", () => {
+      expect(
+        evaluateLeg(
+          { marketType: "receiving_yards", line: 65.5, playerStats: { recYards: 72 } },
+          OVER_PLAYER,
+          game(21, 17, "final"),
+        ),
+      ).toMatchObject({ settlement: "won" });
+    });
+
+    it("pushes a prop that landed exactly on a whole number", () => {
+      expect(
+        evaluateLeg(
+          { marketType: "receiving_yards", line: 65, playerStats: { recYards: 65 } },
+          OVER_PLAYER,
+          game(21, 17, "final"),
+        ),
+      ).toMatchObject({ settlement: "push", detail: "65 rec yds of 65" });
+    });
+
+    it("says nothing when the Over/Under direction was never resolved", () => {
+      expect(
+        evaluateLeg(
+          { marketType: "receiving_yards", line: 65.5, playerStats: { recYards: 41 } },
+          [{ direction: "neutral" }],
+          game(21, 17),
+        ).liveState,
+      ).toBe("unknown");
     });
   });
 

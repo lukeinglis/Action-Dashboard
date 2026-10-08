@@ -13,10 +13,18 @@
 //   spread       backed + line - opponent      (line is the backed side's handicap)
 //   game_total   (home + away) - line          negated for Under
 //   team_total   team - line                   negated for Under
+//   player prop  player stat - line            negated for Under
 //
 // Mid-game that sign is the live state; at final it is the settlement. Deriving
 // them from one number is what guarantees the chip a user watched all game
 // agrees with the result they are paid on.
+//
+// The question the live state answers is precisely "would this leg win if the
+// game ended right now". Worth stating because it is not "is this on pace": an
+// Over 65.5 sitting at 41 yards in the second quarter reads as losing, because
+// right now it would lose. Pace needs time remaining, and guessing at it would
+// put a green dot on a bet that is behind. The detail string carries the raw
+// numbers so the user can judge pace themselves.
 //
 // Over vs Under is read from the subject's rooting *direction*, not re-parsed
 // from the selection text. §26.2 stores "for" for Over and "against" for Under,
@@ -31,6 +39,7 @@ import type {
   RootingDirection,
 } from "@/lib/types/domain";
 import { marketCategory } from "./subjects";
+import { propCurrentValue, propLine, propUnit } from "./prop-stats";
 
 export interface EvaluationSubject {
   teamId?: string | null;
@@ -48,6 +57,12 @@ export interface EvaluationEvent {
 export interface EvaluationLeg {
   marketType: string;
   line?: number | null;
+  /**
+   * The backed player's normalized stat line, when a stats provider supplied
+   * one. Absent for every market that is not a player prop, and absent for a
+   * prop whose player could not be mapped — both of which keep the leg silent.
+   */
+  playerStats?: Record<string, number> | null;
 }
 
 export interface LegEvaluation {
@@ -160,9 +175,28 @@ function marginFor(
       return { value, detail: `${score} of ${leg.line}` };
     }
 
-    // Player props need per-player stats, not a scoreline; futures and
-    // head-to-head matchups need standings or a second subject's result.
-    // Honest silence until those arrive.
+    case "player_over_under": {
+      // Unlike the team markets, a prop is not readable off the scoreboard: it
+      // needs the player's own numbers, which only arrive once the player has
+      // been mapped to a stats provider.
+      if (!leg.playerStats) return null;
+
+      const line = propLine(leg.marketType, leg.line);
+      if (line == null) return null;
+
+      const current = propCurrentValue(leg.marketType, leg.playerStats);
+      if (current == null) return null;
+
+      const over = isOver(subjects);
+      if (over == null) return null;
+
+      const value = over ? current - line : line - current;
+      const unit = propUnit(leg.marketType);
+      return { value, detail: `${current}${unit ? ` ${unit}` : ""} of ${line}` };
+    }
+
+    // Futures and head-to-head matchups need standings or a second subject's
+    // result. Honest silence until those arrive.
     default:
       return null;
   }

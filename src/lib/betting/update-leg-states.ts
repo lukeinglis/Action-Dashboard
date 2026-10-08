@@ -15,6 +15,11 @@
 //   3. An unknown evaluation does not erase a known stored one. A provider that
 //      briefly stops reporting a score should leave the last good state on
 //      screen rather than blanking every chip the user is watching.
+//
+// Player props arrive by the same route but need a second input: the backed
+// player's own numbers, which the scoreline cannot supply. Those come in
+// already matched to participants (applyPlayerStats), and a leg with no mapped
+// participant simply gets none and stays silent.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { EventStatus, LegSettlement, LiveLegState } from "@/lib/types/domain";
@@ -59,7 +64,17 @@ interface EventScoreRow {
  */
 export async function updateLegStates(
   supabase: SupabaseClient,
-  options: { userId: string; eventIds: string[]; now?: () => string },
+  options: {
+    userId: string;
+    eventIds: string[];
+    /**
+     * Normalized stat lines by participant id, from applyPlayerStats. Absent
+     * for a sport with no stats provider, which keeps every prop on that sport
+     * silent rather than guessing off the scoreline.
+     */
+    playerStats?: Map<string, Record<string, number>>;
+    now?: () => string;
+  },
 ): Promise<UpdateLegStatesResult> {
   const { userId } = options;
   const eventIds = [...new Set(options.eventIds)];
@@ -91,11 +106,12 @@ export async function updateLegStates(
 
   const links = (linkRows ?? []) as { bet_leg_id: string; event_id: string }[];
 
-  const [legs, events, subjectsByLeg] = await Promise.all([
+  const [legs, events, subjects] = await Promise.all([
     loadLegs(supabase, legIds),
     loadEvents(supabase, eventIds),
     loadSubjects(supabase, legIds),
   ]);
+  const { subjectsByLeg, participantIdsByLeg } = subjects;
 
   // A leg can be linked to several Events (a same-game parlay is still one
   // Event; a cross-game leg is not). Only single-Event legs can be settled off
@@ -110,7 +126,11 @@ export async function updateLegStates(
     const event = eventId ? events.get(eventId) : undefined;
 
     const evaluation = evaluateLeg(
-      { marketType: leg.market_type, line: leg.line },
+      {
+        marketType: leg.market_type,
+        line: leg.line,
+        playerStats: statsForLeg(participantIdsByLeg.get(leg.id), options.playerStats),
+      },
       subjectsByLeg.get(leg.id) ?? [],
       event ?? null,
     );
@@ -197,21 +217,58 @@ function resolve(row: EventScoreRow) {
   };
 }
 
+/**
+ * The backed player's stat line, or null when there is none to read.
+ *
+ * Only one participant's numbers can drive one prop, so the first mapped
+ * participant wins. A leg naming several players is a market no stat line
+ * answers anyway (§26.1), and null keeps it silent.
+ */
+function statsForLeg(
+  participantIds: string[] | undefined,
+  playerStats: Map<string, Record<string, number>> | undefined,
+): Record<string, number> | null {
+  if (!participantIds || !playerStats) return null;
+  for (const id of participantIds) {
+    const stats = playerStats.get(id);
+    if (stats) return stats;
+  }
+  return null;
+}
+
 async function loadSubjects(
   supabase: SupabaseClient,
   legIds: string[],
-): Promise<Map<string, EvaluationSubject[]>> {
+): Promise<{
+  subjectsByLeg: Map<string, EvaluationSubject[]>;
+  /** Separate from the subjects because evaluateLeg knows nothing of participants. */
+  participantIdsByLeg: Map<string, string[]>;
+}> {
   const { data, error } = await supabase
     .from("bet_leg_subjects")
-    .select("bet_leg_id,team_id,direction")
+    .select("bet_leg_id,team_id,participant_id,direction")
     .in("bet_leg_id", legIds);
   if (error) throw error;
 
-  const map = new Map<string, EvaluationSubject[]>();
-  for (const row of (data ?? []) as { bet_leg_id: string; team_id: string | null; direction: EvaluationSubject["direction"] }[]) {
-    const list = map.get(row.bet_leg_id) ?? [];
+  const subjectsByLeg = new Map<string, EvaluationSubject[]>();
+  const participantIdsByLeg = new Map<string, string[]>();
+
+  for (const row of (data ?? []) as {
+    bet_leg_id: string;
+    team_id: string | null;
+    participant_id: string | null;
+    direction: EvaluationSubject["direction"];
+  }[]) {
+    const list = subjectsByLeg.get(row.bet_leg_id) ?? [];
     list.push({ teamId: row.team_id, direction: row.direction });
-    map.set(row.bet_leg_id, list);
+    subjectsByLeg.set(row.bet_leg_id, list);
+
+    if (row.participant_id) {
+      const participants = participantIdsByLeg.get(row.bet_leg_id) ?? [];
+      participants.push(row.participant_id);
+      participantIdsByLeg.set(row.bet_leg_id, participants);
+    }
   }
-  return map;
+
+  return { subjectsByLeg, participantIdsByLeg };
 }

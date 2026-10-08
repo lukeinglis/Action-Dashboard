@@ -25,7 +25,14 @@ interface LegState {
   eventId?: string;
   eventExpected: boolean;
   eventMatched: boolean;
-  subjects: Array<{ name: string; teamId?: string; participantId?: string; matched: boolean; direction: RootingDirection }>;
+  subjects: Array<{
+    name: string;
+    teamId?: string;
+    participantId?: string;
+    matched: boolean;
+    createParticipant?: boolean;
+    direction: RootingDirection;
+  }>;
   selected: boolean;
 }
 
@@ -176,9 +183,18 @@ export function ReviewForm({
           line: leg.line,
           oddsAmerican: leg.oddsAmerican,
           eventId: leg.eventId,
+          // An unmatched subject used to be dropped here, which on a player
+          // prop silently discarded the player *and* the Over/Under the
+          // direction encodes (§26.2). A prop's subject can only be a player,
+          // so approval creates them instead.
           subjects: leg.subjects
-            .filter((s) => s.matched)
-            .map((s) => ({ teamId: s.teamId, participantId: s.participantId, direction: s.direction })),
+            .filter((s) => s.matched || s.createParticipant)
+            .map((s) => ({
+              teamId: s.teamId,
+              participantId: s.participantId,
+              direction: s.direction,
+              createParticipantNamed: s.matched ? undefined : s.name,
+            })),
         })),
       }));
 
@@ -298,9 +314,19 @@ export function ReviewForm({
                   {leg.subjects.map((s, i) => (
                     <span
                       key={i}
-                      className={`rounded px-2 py-0.5 ${s.matched ? "bg-emerald-950 text-emerald-300" : "bg-red-950 text-red-300"}`}
+                      className={`rounded px-2 py-0.5 ${
+                        s.matched
+                          ? "bg-emerald-950 text-emerald-300"
+                          : s.createParticipant
+                            ? "bg-sky-950 text-sky-300"
+                            : "bg-red-950 text-red-300"
+                      }`}
                     >
-                      {s.name} ({s.direction}){!s.matched && " — unmatched"}
+                      {s.name} ({s.direction})
+                      {/* Told apart from "unmatched" on purpose: approval will
+                          act on this one, so the user needs to know a new
+                          player is about to be added under this spelling. */}
+                      {!s.matched && (s.createParticipant ? " — new player" : " — unmatched")}
                     </span>
                   ))}
                 </div>
