@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  matchProviderEvents,
-  resolveTeamId,
-  toInternalSport,
-  type MatchContext,
-} from "./match-provider-events";
+import { matchProviderEvents, resolveTeamId, type MatchContext } from "./match-provider-events";
 import type { ProviderEvent } from "@/lib/providers/types";
 
 const TZ = "America/New_York";
@@ -52,17 +47,6 @@ const internalEvent = {
   homeTeamId: "team-car",
   awayTeamId: "team-det",
 };
-
-describe("toInternalSport", () => {
-  it("translates the provider's league-namespaced key to the internal sport", () => {
-    expect(toInternalSport("nfl")).toBe("football");
-    expect(toInternalSport("golf")).toBe("golf");
-  });
-
-  it("passes an unknown key through rather than guessing", () => {
-    expect(toInternalSport("cricket")).toBe("cricket");
-  });
-});
 
 describe("resolveTeamId", () => {
   const teams = [lions, panthers];

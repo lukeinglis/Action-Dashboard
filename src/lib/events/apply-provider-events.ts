@@ -19,8 +19,8 @@ import {
   type MatchContext,
   type ProviderEventMatch,
   type TeamCandidate,
-  toInternalSport,
 } from "./match-provider-events";
+import { toInternalSport } from "@/lib/sports/sport-keys";
 import type { EventRow } from "@/lib/db/rows";
 import type { ProviderEvent } from "@/lib/providers/types";
 

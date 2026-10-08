@@ -4,9 +4,20 @@
 // refetch, so interactions stay instant.
 
 import type { RootingLabel } from "@/lib/dashboard/exposure";
+import type { RefreshSportsDataResult } from "@/lib/sports/refresh";
 import type { TicketColor } from "@/lib/tickets/ticket-code";
 import type { DFSEntryStatus, EventStatus, FantasyMatchupStatus, RosterSlotSide, TicketStatus } from "@/lib/types/domain";
 import type { TicketWithStatus } from "./tickets/types";
+
+/**
+ * What the refresh action reports back (§22). Declared here rather than beside
+ * the action so a client component can import the type without reaching into a
+ * `"use server"` module, whose exports must all be server functions.
+ */
+export interface RefreshSportsResult extends RefreshSportsDataResult {
+  /** Relevant sports no adapter covers; the UI calls these manual-only (§23). */
+  unsupportedSports: string[];
+}
 
 export interface ScheduleEventItem {
   id: string;

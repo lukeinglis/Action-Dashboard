@@ -12,21 +12,8 @@
 // dropped rather than inserted.
 
 import { buildEventMatchKey, normalizeEventName, toLocalDateString } from "./match-key";
+import { toInternalSport } from "@/lib/sports/sport-keys";
 import type { ProviderEvent } from "@/lib/providers/types";
-
-/**
- * Provider sport key -> internal `events.sport`. The provider namespaces by
- * league ("nfl"); internally sport and league are separate columns, and teams
- * were seeded as sport "football" / league "NFL".
- */
-const INTERNAL_SPORT: Record<string, string> = {
-  nfl: "football",
-  golf: "golf",
-};
-
-export function toInternalSport(providerSport: string): string {
-  return INTERNAL_SPORT[providerSport] ?? providerSport;
-}
 
 export interface TeamCandidate {
   id: string;
