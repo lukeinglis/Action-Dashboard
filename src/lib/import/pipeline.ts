@@ -90,7 +90,20 @@ export interface ApprovedLeg {
   line?: number;
   oddsAmerican?: number;
   eventId?: string;
-  subjects: Array<{ teamId?: string; participantId?: string; direction: RootingDirection }>;
+  subjects: ApprovedSubject[];
+}
+
+export interface ApprovedSubject {
+  teamId?: string;
+  participantId?: string;
+  direction: RootingDirection;
+  /**
+   * A player prop whose player has no Participant yet: approval creates one
+   * under this name before linking the subject (see
+   * `SubjectProposal.createParticipant`). Ignored when `participantId` or
+   * `teamId` is already set.
+   */
+  createParticipantNamed?: string;
 }
 
 // --- DFS Lineup review (docs/PRD.md section 30, 43) ---

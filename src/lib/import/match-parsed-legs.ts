@@ -44,6 +44,20 @@ export interface SubjectProposal {
   teamId?: string;
   participantId?: string;
   matched: boolean;
+  /**
+   * The named player has no Participant record yet and approval should create
+   * one (docs/PRD.md §30: "Participant Matching").
+   *
+   * Only set for player props, where the subject cannot be anything but a
+   * player — `allowsTeamSubject` is already false for that category. Everywhere
+   * else an unmatched name is ambiguous (a team we don't carry? a typo?), so it
+   * stays unmatched for the user to resolve.
+   *
+   * Without this an unmatched prop subject was dropped on approval, taking the
+   * Over/Under direction with it, and nothing in the app ever created a
+   * Participant — so no player prop could be graded at all.
+   */
+  createParticipant?: boolean;
   direction: RootingDirection;
 }
 
@@ -167,11 +181,15 @@ export function matchParsedLeg(leg: ParsedLeg, candidates: MatchCandidates, time
     if (!name) return;
     const team = findTeam(name, leg.sport, candidates.teams);
     const participant = team ? undefined : findParticipant(name, leg.sport, candidates.participants);
+    const unmatchedPlayer = !team && !participant && category === "player_over_under";
     subjects.push({
       name,
       teamId: team?.id,
       participantId: participant?.id,
       matched: Boolean(team || participant),
+      // Set only when true, so the review payload carries the flag solely for
+      // the subjects approval will act on.
+      ...(unmatchedPlayer && { createParticipant: true as const }),
       direction: defaultSubjectDirection(leg.marketType, role, leg.overUnder),
     });
   }

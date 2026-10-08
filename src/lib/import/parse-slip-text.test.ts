@@ -70,6 +70,41 @@ Wager: $20.00
 To Win: $160.00
 Payout: $180.00`;
 
+// A real DraftKings same-game parlay, transcribed from a screenshot. The slip
+// prints "To Pay" and no profit figure at all, which is what every DK ticket
+// looks like — the three-number format was never a real-world shape.
+const DRAFTKINGS_SGP = `Bet Slip
+Type: 3-Leg Same Game Parlay
+Leg 1:
+Market: spread
+Selection: TB Buccaneers +9.5
+Subject: TB Buccaneers
+Event: TB @ DAL
+Sport: football/NFL
+Line: 9.5
+OverUnder: over
+
+Leg 2:
+Market: receiving_yards
+Selection: CeeDee Lamb Over 100+
+Subject: CeeDee Lamb
+Event: TB @ DAL
+Sport: football/NFL
+Line: 100
+OverUnder: over
+
+Leg 3:
+Market: rushing_yards
+Selection: Jalon Daniels Over 40+
+Subject: Jalon Daniels
+Event: TB @ DAL
+Sport: football/NFL
+Line: 40
+OverUnder: over
+Wager: $10.00
+To Pay: $103.80
+Promo: +50% Parlay Boost`;
+
 describe("parseSlipText", () => {
   it("parses a single straight bet", () => {
     const [ticket] = parseSlipText(STRAIGHT);
@@ -127,6 +162,71 @@ describe("parseSlipText", () => {
   it("parses multiple tickets pasted together, in order", () => {
     const tickets = parseSlipText([STRAIGHT, PARLAY, BONUS].join("\n\n"));
     expect(tickets.map((t) => t.sportsbookTicketId)).toEqual(["DK-1001", "DK-1002", "DK-1003"]);
+  });
+
+  it('parses a DraftKings slip that labels the total "To Pay" and omits the profit', () => {
+    const [ticket] = parseSlipText(DRAFTKINGS_SGP);
+    expect(ticket.stakeCents).toBe(1000);
+    expect(ticket.totalReturnCents).toBe(10380);
+    // Not printed anywhere on the slip; the stake and the total give it.
+    expect(ticket.toWinCents).toBe(9380);
+    expect(ticket.promotionNote).toBe("+50% Parlay Boost");
+    expect(ticket.legs.map((l) => l.subject)).toEqual([
+      "TB Buccaneers",
+      "CeeDee Lamb",
+      "Jalon Daniels",
+    ]);
+  });
+
+  it('reads a book\'s "N+" prop as the half-point line that means the same bet', () => {
+    // "Over 100+" pays out at exactly 100 yards. Storing 100 against a strict
+    // comparison would grade that game as a push.
+    const [ticket] = parseSlipText(DRAFTKINGS_SGP);
+    expect(ticket.legs[1]).toMatchObject({ selection: "CeeDee Lamb Over 100+", line: 99.5 });
+    expect(ticket.legs[2].line).toBe(39.5);
+  });
+
+  it('leaves a "+9.5" spread alone, where the "+" is the handicap and not an "or more"', () => {
+    const [ticket] = parseSlipText(DRAFTKINGS_SGP);
+    expect(ticket.legs[0]).toMatchObject({ selection: "TB Buccaneers +9.5", line: 9.5 });
+  });
+
+  it("derives the payout from a slip that shows only the profit", () => {
+    const toWinOnly = STRAIGHT.replace("Payout: $83.33\n", "");
+    const [ticket] = parseSlipText(toWinOnly);
+    expect(ticket.toWinCents).toBe(3333);
+    expect(ticket.totalReturnCents).toBe(8333);
+  });
+
+  it("derives the profit from a slip that shows only the payout", () => {
+    const payoutOnly = STRAIGHT.replace("To Win: $33.33\n", "");
+    const [ticket] = parseSlipText(payoutOnly);
+    expect(ticket.toWinCents).toBe(3333);
+    expect(ticket.totalReturnCents).toBe(8333);
+  });
+
+  it("does not count a bonus bet's stake as returned when deriving", () => {
+    // The stake is the book's money, so the payout is the whole profit — the
+    // non-bonus arithmetic would under-report the win by the stake.
+    const payoutOnly = BONUS.replace("To Win: $32.50\n", "");
+    const [ticket] = parseSlipText(payoutOnly);
+    expect(ticket.isBonusBet).toBe(true);
+    expect(ticket.toWinCents).toBe(3250);
+    expect(ticket.totalReturnCents).toBe(3250);
+
+    const toWinOnly = BONUS.replace("Payout: $32.50\n", "");
+    expect(parseSlipText(toWinOnly)[0].totalReturnCents).toBe(3250);
+  });
+
+  it("throws SlipParseError when neither To Win nor Payout is present", () => {
+    const broken = STRAIGHT.replace("To Win: $33.33\n", "").replace("Payout: $83.33\n", "");
+    expect(() => parseSlipText(broken)).toThrow(/Missing "To Win" or "Payout"/);
+  });
+
+  it("throws rather than storing a negative profit when the payout is below the stake", () => {
+    // One of the two numbers was misread; deriving would record a loss as a win.
+    const broken = STRAIGHT.replace("To Win: $33.33\n", "").replace("Payout: $83.33", "Payout: $8.33");
+    expect(() => parseSlipText(broken)).toThrow(/less than "Wager"/);
   });
 
   it("throws SlipParseError on empty text", () => {

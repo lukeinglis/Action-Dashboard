@@ -16,8 +16,14 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyProviderEvents } from "@/lib/events/apply-provider-events";
+import { applyPlayerStats } from "@/lib/betting/apply-player-stats";
 import { updateLegStates } from "@/lib/betting/update-leg-states";
-import type { ProviderEvent, SportsProvider } from "@/lib/providers/types";
+import type {
+  PlayerStatsProvider,
+  ProviderEvent,
+  ProviderPlayerStat,
+  SportsProvider,
+} from "@/lib/providers/types";
 import {
   claimRefreshLock,
   cooldownSecondsRemaining,
@@ -60,7 +66,18 @@ export interface SportRefreshResult {
    * but no leg has not answered "is my ticket winning".
    */
   legsUpdated: number;
+  /** Participant -> provider player mappings created by the stats provider (§20.2). */
+  participantMappingsCreated: number;
+  /** Prop participants the stats provider could not resolve to one player. */
+  playersNeedingMatch: { participantId: string; name: string; candidateProviderIds: string[] }[];
   error?: string;
+  /**
+   * Why the player stats are missing, when the scores refreshed fine. Kept
+   * apart from `error` on purpose: the scoreline did update, so calling the
+   * whole sport failed would be a lie, and it must not be recorded as the
+   * provider's last error either. Props are simply silent this time round.
+   */
+  statsError?: string;
 }
 
 export interface RefreshSportsDataResult {
@@ -73,6 +90,14 @@ export interface RefreshSportsDataOptions {
   userId: string;
   timeZone: string;
   provider: SportsProvider;
+  /**
+   * Optional second source for the numbers a scoreline cannot give: a player's
+   * own stat line (§30). Separate from `provider` because the score source and
+   * the stat source are different services with different coverage — ESPN has
+   * every sport the user tracks, Sleeper has NFL players. A sport it does not
+   * support refreshes exactly as before, with its props left silent.
+   */
+  statsProvider?: PlayerStatsProvider;
   scopes: SportScope[];
   now?: () => Date;
   /** Overridden only by tests, to exercise stale-lock recovery. */
@@ -83,7 +108,7 @@ export async function refreshSportsData(
   supabase: SupabaseClient,
   options: RefreshSportsDataOptions,
 ): Promise<RefreshSportsDataResult> {
-  const { userId, timeZone, provider, scopes } = options;
+  const { userId, timeZone, provider, statsProvider, scopes } = options;
   const now = options.now ?? (() => new Date());
   const providerKey = provider.key;
   const limit = provider.config.dailyRequestLimit;
@@ -102,6 +127,7 @@ export async function refreshSportsData(
         userId,
         timeZone,
         provider,
+        statsProvider,
         now,
         lockStaleAfterMs: options.lockStaleAfterMs,
         quotaExhausted: quotaStatus(usedBefore, limit) === "exhausted",
@@ -130,6 +156,7 @@ interface OneSportContext {
   userId: string;
   timeZone: string;
   provider: SportsProvider;
+  statsProvider?: PlayerStatsProvider;
   now: () => Date;
   lockStaleAfterMs?: number;
   quotaExhausted: boolean;
@@ -239,6 +266,12 @@ async function fetchAndApply(
     });
   }
 
+  // Player stats come from a different service, so they are fetched and
+  // degraded on their own: Sleeper being down must not cost the user their
+  // scorelines. Their requests are deliberately left out of `requestCount`,
+  // which counts against `provider`'s daily limit and not another service's.
+  const players = await fetchPlayerStats(scope, context);
+
   try {
     const { touchedEventIds, ...applied } = await applyProviderEvents(supabase, providerEvents, {
       userId,
@@ -246,11 +279,24 @@ async function fetchAndApply(
       timeZone,
     });
 
+    const stats =
+      players.stats && context.statsProvider
+        ? await applyPlayerStats(supabase, players.stats, {
+            userId,
+            providerKey: context.statsProvider.key,
+            sport: scope.sport,
+          })
+        : null;
+
     // The second half of what the refresh button promises: carry the new
     // scorelines through to the legs riding on them (§26.1). Kept inside the
     // same try so a failure here is reported as a failed refresh rather than
     // silently leaving legs stale behind updated Events.
-    const legs = await updateLegStates(supabase, { userId, eventIds: touchedEventIds });
+    const legs = await updateLegStates(supabase, {
+      userId,
+      eventIds: touchedEventIds,
+      playerStats: stats?.statsByParticipant,
+    });
 
     return {
       sport: scope.sport,
@@ -259,6 +305,9 @@ async function fetchAndApply(
       requestCount,
       ...applied,
       legsUpdated: legs.updated,
+      participantMappingsCreated: stats?.participantMappingsCreated ?? 0,
+      playersNeedingMatch: stats?.needsMatch ?? [],
+      statsError: players.error,
     };
   } catch (error) {
     // Caught here rather than by the backstop so the requests already spent
@@ -268,6 +317,44 @@ async function fetchAndApply(
       requestCount,
       error: errorMessage(error),
     });
+  }
+}
+
+/**
+ * This sport's player stat lines, or why there are none.
+ *
+ * Never throws and never reports a failure as the sport's failure. A missing
+ * stats provider, an unsupported sport, and a service that is down are the same
+ * outcome for the user — props stay silent — and none of them should cost them
+ * the scores that did arrive.
+ */
+async function fetchPlayerStats(
+  scope: SportScope,
+  context: OneSportContext,
+): Promise<{ stats: ProviderPlayerStat[] | null; error?: string }> {
+  const { statsProvider } = context;
+  if (!statsProvider || !statsProvider.supportsSport(scope.providerSport)) {
+    return { stats: null };
+  }
+
+  const label = `${statsProvider.key} ${scope.providerSport}`;
+  try {
+    // The current week has to be asked for rather than computed: the NFL week
+    // does not turn over at midnight, and a guess would fetch the wrong slate's
+    // numbers — which looks like a player who stopped accumulating.
+    const { season, week, seasonType } = await withTimeout(
+      statsProvider.getCurrentWeek(),
+      statsProvider.config.timeoutMs,
+      label,
+    );
+    const stats = await withTimeout(
+      statsProvider.getWeekPlayerStats({ season, week, seasonType }),
+      statsProvider.config.timeoutMs,
+      label,
+    );
+    return { stats };
+  } catch (error) {
+    return { stats: null, error: errorMessage(error) };
   }
 }
 
@@ -310,6 +397,8 @@ function emptyResult(
     needsMatch: [],
     lostMappingEventIds: [],
     legsUpdated: 0,
+    participantMappingsCreated: 0,
+    playersNeedingMatch: [],
     ...overrides,
   };
 }

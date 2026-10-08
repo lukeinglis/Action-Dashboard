@@ -56,11 +56,33 @@ function seed(options: SeedOptions = {}) {
   });
 }
 
-function run(fake: ReturnType<typeof createFakeSupabase>, eventIds = [EVENT]) {
+function run(
+  fake: ReturnType<typeof createFakeSupabase>,
+  eventIds = [EVENT],
+  playerStats?: Map<string, Record<string, number>>,
+) {
   return updateLegStates(fake as unknown as SupabaseClient, {
     userId: USER,
     eventIds,
+    playerStats,
     now: () => "2026-10-08T20:30:00.000Z",
+  });
+}
+
+/** A prop leg on one player, the shape applyPlayerStats feeds. */
+function propSeed(marketType: string, line: number | null) {
+  return seed({
+    leg: { market_type: marketType, line },
+    subjects: [
+      {
+        id: "s-1",
+        user_id: USER,
+        bet_leg_id: "leg-1",
+        participant_id: "part-1",
+        team_id: null,
+        direction: "for",
+      },
+    ],
   });
 }
 
@@ -141,13 +163,51 @@ describe("updateLegStates", () => {
     expect(fake.tables.bet_legs[0].automatic_live_state).toBeNull();
   });
 
-  it("leaves a player prop alone, which a scoreline cannot answer", async () => {
-    const fake = seed({
-      leg: { market_type: "receiving_yards", line: 65.5 },
-      subjects: [{ id: "s-1", user_id: USER, bet_leg_id: "leg-1", team_id: null, direction: "for" }],
-    });
+  it("leaves a player prop alone when no stats were supplied", async () => {
+    const fake = propSeed("receiving_yards", 65.5);
     expect(await run(fake)).toEqual({ updated: 0, unchanged: 1 });
     expect(fake.tables.bet_legs[0].automatic_live_state).toBeNull();
+  });
+
+  it("writes a prop's live state from the backed player's stat line", async () => {
+    const fake = propSeed("receiving_yards", 65.5);
+    expect(await run(fake, [EVENT], new Map([["part-1", { recYards: 72 }]]))).toEqual({
+      updated: 1,
+      unchanged: 0,
+    });
+
+    const leg = fake.tables.bet_legs[0];
+    expect(leg.automatic_live_state).toBe("winning");
+    expect(leg.live_detail).toBe("72 rec yds of 65.5");
+  });
+
+  it("leaves a prop alone when the stats are for a different player", async () => {
+    // An unmatched participant must not borrow another player's numbers.
+    const fake = propSeed("receiving_yards", 65.5);
+    expect(await run(fake, [EVENT], new Map([["part-2", { recYards: 72 }]]))).toEqual({
+      updated: 0,
+      unchanged: 1,
+    });
+    expect(fake.tables.bet_legs[0].automatic_live_state).toBeNull();
+  });
+
+  it("settles a prop once the game is final", async () => {
+    const fake = seed({
+      leg: { market_type: "anytime_touchdown", line: null },
+      event: { automatic_status: "final" },
+      subjects: [
+        {
+          id: "s-1",
+          user_id: USER,
+          bet_leg_id: "leg-1",
+          participant_id: "part-1",
+          team_id: null,
+          direction: "for",
+        },
+      ],
+    });
+    await run(fake, [EVENT], new Map([["part-1", { recTd: 1 }]]));
+    expect(fake.tables.bet_legs[0].automatic_status).toBe("won");
   });
 
   it("does nothing when no leg rides on the refreshed Events", async () => {

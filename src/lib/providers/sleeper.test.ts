@@ -144,11 +144,20 @@ describe("normalizeWeekStats", () => {
     expect(entry.stats).toEqual({ receptions: 1, recYards: 9 });
   });
 
-  it("treats a week with no recorded stats as a failure", () => {
+  it("treats rows that parse to nothing as a failure", () => {
+    // Players are listed but no stat key landed: the payload shape moved under
+    // STAT_KEYS, and returning nothing would read as "nobody has played yet".
     expect(() => normalizeWeekStats({ "3163": { gp: 0 } }, directory)).toThrow(
       /no player recorded anything/,
     );
-    expect(() => normalizeWeekStats({}, directory)).toThrow(/no player recorded anything/);
+  });
+
+  it("returns nothing for a week that has not kicked off yet", () => {
+    // Sleeper answers `{}` for a week with no games played — the real state on
+    // a Thursday afternoon, when the week's first game is that night. Calling
+    // it a failure would warn the user about a working provider all week.
+    expect(normalizeWeekStats({}, directory)).toEqual([]);
+    expect(normalizeWeekStats({ TEAM_DAL: { pts_ppr: 20 } }, directory)).toEqual([]);
   });
 
   it("rejects a non-object payload", () => {

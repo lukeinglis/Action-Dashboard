@@ -49,13 +49,13 @@ Opponent Subject: <the opposing player/team name, ONLY for "matchup" markets wit
 Event: <Away Team> @ <Home Team>       (omit this line entirely if no single game/matchup is shown, e.g. season futures or cross-game matchups)
 Sport: <sport>/<league>                (REQUIRED — see the Sport determination above; use "unknown" only if truly undeterminable. Omit only the "/<league>" part if the league specifically can't be determined.)
 Start: <ISO 8601 UTC timestamp>        (omit unless an absolute date is shown — see the game-row note above; do not convert a relative time like "Today 1:00 PM")
-Line: <numeric line>                   (omit if not applicable)
+Line: <numeric line>                   (omit if not applicable. Transcribe the number exactly as printed and do not convert an "or more" notation: a prop shown as "100+" is "Line: 100", not 99.5 — the parser handles that conversion.)
 OverUnder: over | under | yes | no     (omit if not applicable)
 Odds: <american odds, e.g. -150 or +120>  (omit if this leg has no individually-shown odds, e.g. an SGP pick under a combined group odds)
 (repeat "Leg N:" through "Odds:" for each additional leg, in the order shown, including every individual pick from inside an SGP/SGPx grouping)
 Wager: $<amount>
-To Win: $<amount>
-Payout: $<amount>
+To Win: $<amount>                      (the profit alone, excluding the stake; omit if the slip only shows a total. Books label this "To Win" or "To Return".)
+Payout: $<amount>                      (the total return including the stake; omit if the slip only shows the profit. Books label this "Payout", "To Pay", or "Total Payout" — emit it under "Payout:" whichever label is printed.)
 Placed: <ISO 8601 UTC timestamp>       (omit if not shown)
 Promo: <free-text promo name, e.g. "Profit Boost", "+50% Parlay Boost", "QUALIFYING BET">  (omit if not shown; also use this for boost/qualifying-bet banners even when a struck-through original odds value is shown alongside a boosted one — transcribe only the final boosted Odds value for the leg/ticket in that case)
 

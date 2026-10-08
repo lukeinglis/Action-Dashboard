@@ -54,6 +54,71 @@ function parseDollars(raw: string | undefined, field: string, ticketRaw: string)
   return cents;
 }
 
+function optionalDollars(raw: string | undefined, field: string, ticketRaw: string): number | undefined {
+  if (raw === undefined) return undefined;
+  return parseDollars(raw, field, ticketRaw);
+}
+
+/**
+ * Derives whichever of to-win / payout the book didn't print.
+ *
+ * Real slips show only two of the three numbers, and which two depends on the
+ * book: DraftKings prints "To Pay" (the total return) and no profit figure,
+ * FanDuel prints "To Win" (the profit) and no total. Extraction transcribes
+ * what is on screen and omits the rest — correctly, since inventing a number
+ * is worse — so requiring all three rejected real tickets outright.
+ *
+ * The two are algebraically linked, so either one plus the stake gives the
+ * other. The exception is a bonus bet, where the stake is not returned and
+ * the payout *is* the profit.
+ */
+function resolveReturns(
+  stakeCents: number,
+  isBonusBet: boolean,
+  toWin: number | undefined,
+  payout: number | undefined,
+  ticketRaw: string,
+): { toWinCents: number; totalReturnCents: number } {
+  const stakeReturned = isBonusBet ? 0 : stakeCents;
+
+  if (toWin !== undefined && payout !== undefined) {
+    return { toWinCents: toWin, totalReturnCents: payout };
+  }
+  if (toWin !== undefined) {
+    return { toWinCents: toWin, totalReturnCents: toWin + stakeReturned };
+  }
+  if (payout !== undefined) {
+    if (payout < stakeReturned) {
+      // A payout below the stake cannot be a total return, so one of the two
+      // was misread. Guessing would store a negative profit on the ticket.
+      throw new SlipParseError(
+        `"Payout" ($${(payout / 100).toFixed(2)}) is less than "Wager" ($${(stakeCents / 100).toFixed(2)}) in ticket:\n${ticketRaw}`,
+      );
+    }
+    return { toWinCents: payout - stakeReturned, totalReturnCents: payout };
+  }
+  throw new SlipParseError(`Missing "To Win" or "Payout" in ticket:\n${ticketRaw}`);
+}
+
+/**
+ * Rewrites a book's "N+" line to the half-point line that means the same thing.
+ *
+ * DraftKings writes player props as "Over 100+", which pays out at exactly 100
+ * — "at least 100", not "more than 100". Every line in this system is compared
+ * strictly, so storing 100 would grade a 100-yard game as a push and show the
+ * leg as "even" all the way to the final whistle. 99.5 is the same bet stated
+ * in the form the rest of the code already means.
+ *
+ * Only applied when the selection's "+" number is the line itself, so a "+9.5"
+ * spread or a "+120" price in the text can't move it.
+ */
+function unplusLine(line: number | undefined, lineRaw: string | undefined, selection: string): number | undefined {
+  if (line === undefined || lineRaw === undefined) return line;
+  if (!Number.isInteger(line)) return line;
+  const escaped = lineRaw.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\d.])${escaped}\\+`).test(selection) ? line - 0.5 : line;
+}
+
 function parseOneLeg(legBlock: string, ticketRaw: string): ParsedLeg {
   const fields = parseKeyValueLines(legBlock);
 
@@ -79,10 +144,11 @@ function parseOneLeg(legBlock: string, ticketRaw: string): ParsedLeg {
   }
 
   const lineRaw = fields.get("line");
-  const line = lineRaw !== undefined ? parseFloat(lineRaw) : undefined;
-  if (lineRaw !== undefined && Number.isNaN(line)) {
+  const parsedLine = lineRaw !== undefined ? parseFloat(lineRaw) : undefined;
+  if (lineRaw !== undefined && Number.isNaN(parsedLine)) {
     throw new SlipParseError(`Could not parse "Line" value "${lineRaw}" in ticket:\n${ticketRaw}`);
   }
+  const line = unplusLine(parsedLine, lineRaw, selection);
 
   const overUnderRaw = fields.get("overunder")?.toLowerCase();
   if (overUnderRaw && !["over", "under", "yes", "no"].includes(overUnderRaw)) {
@@ -121,7 +187,7 @@ function parseOneTicket(ticketRaw: string): ParsedTicket {
   const legBlocks = ticketRaw
     .split(/^Leg \d+:\s*$/m)
     .slice(1)
-    .map((block) => block.split(/^(?:Wager|To Win|Payout|Placed|Promo):/m)[0]);
+    .map((block) => block.split(/^(?:Wager|To Win|To Pay|Total Payout|Payout|Placed|Promo):/m)[0]);
 
   if (legBlocks.length === 0) {
     throw new SlipParseError(`No "Leg N:" blocks found in ticket:\n${ticketRaw}`);
@@ -131,8 +197,16 @@ function parseOneTicket(ticketRaw: string): ParsedTicket {
 
   const tail = parseKeyValueLines(ticketRaw);
   const stakeCents = parseDollars(tail.get("wager"), "Wager", ticketRaw);
-  const toWinCents = parseDollars(tail.get("to win"), "To Win", ticketRaw);
-  const totalReturnCents = parseDollars(tail.get("payout"), "Payout", ticketRaw);
+  // "To Pay" and "Total Payout" are the same number as "Payout" under a
+  // different book's label, so they are read as one field rather than three.
+  const payoutRaw = tail.get("payout") ?? tail.get("to pay") ?? tail.get("total payout");
+  const { toWinCents, totalReturnCents } = resolveReturns(
+    stakeCents,
+    isBonusBet,
+    optionalDollars(tail.get("to win"), "To Win", ticketRaw),
+    optionalDollars(payoutRaw, "Payout", ticketRaw),
+    ticketRaw,
+  );
 
   return {
     sportsbookTicketId,

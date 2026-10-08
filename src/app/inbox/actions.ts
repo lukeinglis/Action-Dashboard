@@ -13,6 +13,7 @@ import { createTicket, type CreateTicketInput } from "@/lib/tickets/tickets";
 import { createBetLeg } from "@/lib/tickets/bet-legs";
 import { linkBetLegEvent } from "@/lib/tickets/bet-leg-events";
 import { setBetLegSubject } from "@/lib/tickets/bet-leg-subjects";
+import { ensureParticipant } from "@/lib/participants/ensure";
 import { getUserPreferences } from "@/lib/preferences/get-user-preferences";
 import { extractScreenshotText } from "@/lib/import/extract-screenshot";
 import { SlipParseError } from "@/lib/import/parse-slip-text";
@@ -263,10 +264,25 @@ export async function approveParsedImport(
         await linkBetLegEvent(supabase, userId, betLeg.id, leg.eventId, "auto");
       }
       for (const subject of leg.subjects) {
+        // A prop's player may not exist yet — this is the only place in the app
+        // that creates one, and without it the subject (and with it the
+        // Over/Under direction) was simply dropped.
+        let participantId = subject.participantId;
+        if (!participantId && !subject.teamId && subject.createParticipantNamed) {
+          participantId = (
+            await ensureParticipant(supabase, userId, {
+              name: subject.createParticipantNamed,
+              sport: leg.sport,
+              league: leg.league,
+            })
+          ).id;
+        }
+        if (!participantId && !subject.teamId) continue;
+
         await setBetLegSubject(supabase, userId, {
           betLegId: betLeg.id,
           teamId: subject.teamId,
-          participantId: subject.participantId,
+          participantId,
           proposedDirection: subject.direction,
           matchMethod: "auto",
         });

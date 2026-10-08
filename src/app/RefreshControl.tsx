@@ -75,7 +75,17 @@ export function RefreshControl({ refreshStates, staleOverrideCount, unsupportedS
   }, [lastResult, cooldownMs]);
 
   const lines = freshnessLines(refreshStates, timeZone, lastResult?.results ?? []);
-  const legsUpdated = (lastResult?.results ?? []).reduce((total, r) => total + r.legsUpdated, 0);
+  const results = lastResult?.results ?? [];
+  const legsUpdated = results.reduce((total, r) => total + r.legsUpdated, 0);
+
+  // §22 degradation, made visible. The scores refreshed, so the sport's own
+  // line reads "updated"; without this the props would just sit there with no
+  // dot and no reason given.
+  const statsUnavailable = results.some((r) => r.statsError != null);
+
+  // §20.2: a prop whose player resolved to several candidates. Named rather
+  // than counted — the name is what the user needs in order to correct it.
+  const playersNeedingMatch = results.flatMap((r) => r.playersNeedingMatch.map((p) => p.name));
   const quota = lastResult?.quota;
   const quotaWarning =
     quota && quota.limit != null && quota.status !== "ok"
@@ -114,6 +124,16 @@ export function RefreshControl({ refreshStates, staleOverrideCount, unsupportedS
         {legsUpdated > 0 && (
           <span className="text-neutral-400">
             {legsUpdated} leg{legsUpdated === 1 ? "" : "s"} updated
+          </span>
+        )}
+
+        {statsUnavailable && <span className="text-amber-300">player stats unavailable</span>}
+
+        {playersNeedingMatch.length > 0 && (
+          <span className="text-amber-300">
+            {playersNeedingMatch.length > 2
+              ? `${playersNeedingMatch.length} players need matching`
+              : `${playersNeedingMatch.join(", ")} needs matching`}
           </span>
         )}
 

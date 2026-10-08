@@ -13,6 +13,7 @@ import { resolveDateWindow } from "@/lib/dashboard/date-window";
 import { resolveOpeningState } from "@/lib/dashboard/views";
 import { getUserPreferences } from "@/lib/preferences/get-user-preferences";
 import { EspnProvider } from "@/lib/providers/espn";
+import { SleeperProvider } from "@/lib/providers/sleeper";
 import { loadRefreshScope } from "@/lib/sports/refresh-scope-db";
 import { refreshSportsData } from "@/lib/sports/refresh";
 import type { DashboardView, DashboardViewFilters, DashboardViewLayout, WorkspaceState } from "@/lib/types/domain";
@@ -116,6 +117,10 @@ export async function refreshSports(): Promise<RefreshSportsResult> {
     userId,
     timeZone: timezone,
     provider: EspnProvider,
+    // Scores come from ESPN, player stat lines from Sleeper (§30). Both are
+    // free; Sleeper answers for every NFL player in one call, so adding it
+    // costs a flat two requests rather than one per prop.
+    statsProvider: SleeperProvider,
     scopes,
   });
 

@@ -6,6 +6,7 @@ import { createFakeSupabase } from "@/lib/testing/fake-supabase";
 import {
   DEFAULT_PROVIDER_CONFIG,
   type ProviderConfig,
+  type PlayerStatsProvider,
   type ProviderEvent,
   type SportsProvider,
 } from "@/lib/providers/types";
@@ -108,14 +109,86 @@ function run(
   fake: ReturnType<typeof createFakeSupabase>,
   provider: SportsProvider,
   scopes: SportScope[] = [nflScope],
+  statsProvider?: PlayerStatsProvider,
 ) {
   return refreshSportsData(fake as unknown as SupabaseClient, {
     userId: USER,
     timeZone: TZ,
     provider,
+    statsProvider,
     scopes,
     now: () => NOW,
   });
+}
+
+interface FakeStatsProviderOptions {
+  getCurrentWeek?: PlayerStatsProvider["getCurrentWeek"];
+  getWeekPlayerStats?: PlayerStatsProvider["getWeekPlayerStats"];
+  supported?: string[];
+}
+
+function fakeStatsProvider(options: FakeStatsProviderOptions = {}): PlayerStatsProvider {
+  const supported = options.supported ?? ["nfl"];
+  return {
+    key: "sleeper",
+    config: DEFAULT_PROVIDER_CONFIG,
+    supportsSport: (sport) => supported.includes(sport),
+    getCurrentWeek:
+      options.getCurrentWeek ?? (async () => ({ season: "2026", week: 6, seasonType: "regular" })),
+    getWeekPlayerStats:
+      options.getWeekPlayerStats ??
+      (async () => [
+        {
+          providerPlayerId: "4984",
+          playerName: "Devin Egbuka",
+          teamAbbreviation: "DET",
+          stats: { recYards: 72 },
+        },
+      ]),
+  };
+}
+
+/** An Event with a prop leg on one player riding on it. */
+function propRows() {
+  return {
+    bet_legs: [
+      {
+        id: "leg-1",
+        user_id: USER,
+        market_type: "receiving_yards",
+        line: 65.5,
+        automatic_live_state: null,
+        automatic_status: null,
+        manual_live_state: null,
+        live_detail: null,
+        automatic_changed_at: null,
+      },
+    ],
+    bet_leg_events: [
+      { id: "link-1", user_id: USER, bet_leg_id: "leg-1", event_id: "event-1", match_method: "auto" },
+    ],
+    bet_leg_subjects: [
+      {
+        id: "s-1",
+        user_id: USER,
+        bet_leg_id: "leg-1",
+        participant_id: "part-1",
+        team_id: null,
+        direction: "for",
+      },
+    ],
+    participants: [
+      {
+        id: "part-1",
+        user_id: USER,
+        type: "player",
+        sport: "football",
+        league: "NFL",
+        name: "D. Egbuka",
+        team_id: "team-det",
+      },
+    ],
+  };
 }
 
 function stateRow(overrides: Record<string, unknown> = {}) {
@@ -346,5 +419,125 @@ describe("refreshSportsData", () => {
     expect(result.results).toEqual([]);
     expect(fake.tables.sports_refresh_state).toHaveLength(0);
     expect(fake.tables.events[0].automatic_status).toBeNull();
+  });
+
+  describe("player stats", () => {
+    function propSetup() {
+      return createFakeSupabase({
+        teams,
+        events: [eventRow()],
+        provider_mappings: [],
+        sports_refresh_state: [],
+        ...propRows(),
+      });
+    }
+
+    it("carries a player's stat line through to the prop leg riding on the game", async () => {
+      // The whole point of the second provider: a prop is not on the
+      // scoreboard, so without it the refresh moves the score and leaves the
+      // leg reading nothing.
+      const fake = propSetup();
+      const result = await run(fake, fakeProvider(), [nflScope], fakeStatsProvider());
+
+      expect(result.results[0]).toMatchObject({
+        status: "refreshed",
+        legsUpdated: 1,
+        participantMappingsCreated: 1,
+        playersNeedingMatch: [],
+      });
+      expect(fake.tables.bet_legs[0].automatic_live_state).toBe("winning");
+      expect(fake.tables.bet_legs[0].live_detail).toBe("72 rec yds of 65.5");
+    });
+
+    it("leaves the prop silent with no stats provider configured", async () => {
+      const fake = propSetup();
+      const result = await run(fake, fakeProvider());
+
+      expect(result.results[0]).toMatchObject({ status: "refreshed", legsUpdated: 0 });
+      expect(fake.tables.bet_legs[0].automatic_live_state).toBeNull();
+      expect(fake.tables.provider_mappings.some((m) => m.entity_type === "participant")).toBe(false);
+    });
+
+    it("still refreshes the scores when the stats provider fails", async () => {
+      // §22 degradation: Sleeper being down must not cost the user the
+      // scorelines ESPN did return. Reported apart from `error` so the sport is
+      // not called failed when its scores updated.
+      const fake = propSetup();
+      const result = await run(
+        fake,
+        fakeProvider(),
+        [nflScope],
+        fakeStatsProvider({
+          getWeekPlayerStats: async () => {
+            throw new Error("sleeper 503");
+          },
+        }),
+      );
+
+      expect(result.results[0]).toMatchObject({ status: "refreshed", updated: 1 });
+      expect(result.results[0].statsError).toBe("sleeper 503");
+      expect(result.results[0].error).toBeUndefined();
+      expect(fake.tables.events[0].automatic_home_score).toBe(29);
+      expect(fake.tables.bet_legs[0].automatic_live_state).toBeNull();
+      // Nor is the stats failure recorded as the score provider's last error.
+      expect(fake.tables.sports_refresh_state[0].last_error).toBeNull();
+    });
+
+    it("times out a stats provider that never settles without failing the sport", async () => {
+      const fake = propSetup();
+      const slow = fakeStatsProvider({ getCurrentWeek: () => new Promise(() => {}) });
+      const result = await run(fake, fakeProvider(), [nflScope], {
+        ...slow,
+        config: { ...slow.config, timeoutMs: 10 },
+      });
+
+      expect(result.results[0].status).toBe("refreshed");
+      expect(result.results[0].statsError).toMatch(/timed out after 10ms/);
+    });
+
+    it("asks the provider which week it is rather than assuming", async () => {
+      // The NFL week does not turn over at midnight; guessing would fetch the
+      // wrong slate, which reads as a player who stopped accumulating.
+      const getWeekPlayerStats = vi.fn<PlayerStatsProvider["getWeekPlayerStats"]>(async () => []);
+      await run(
+        propSetup(),
+        fakeProvider(),
+        [nflScope],
+        fakeStatsProvider({
+          getCurrentWeek: async () => ({ season: "2026", week: 6, seasonType: "post" }),
+          getWeekPlayerStats,
+        }),
+      );
+
+      expect(getWeekPlayerStats).toHaveBeenCalledWith({
+        season: "2026",
+        week: 6,
+        seasonType: "post",
+      });
+    });
+
+    it("skips a sport the stats provider does not cover", async () => {
+      const getWeekPlayerStats = vi.fn<PlayerStatsProvider["getWeekPlayerStats"]>(async () => []);
+      const result = await run(
+        propSetup(),
+        fakeProvider(),
+        [{ sport: "golf", providerSport: "golf", localDates: ["2026-10-04"] }],
+        fakeStatsProvider({ getWeekPlayerStats }),
+      );
+
+      expect(getWeekPlayerStats).not.toHaveBeenCalled();
+      expect(result.results[0]).toMatchObject({ status: "refreshed", statsError: undefined });
+    });
+
+    it("does not spend the score provider's quota on stat requests", async () => {
+      // Different service, different limit. Counting Sleeper's calls against
+      // ESPN's daily cap would make the user look closer to exhausting it than
+      // they are.
+      const fake = propSetup();
+      const result = await run(fake, fakeProvider(), [nflScope], fakeStatsProvider());
+
+      expect(result.results[0].requestCount).toBe(1);
+      expect(result.quota.used).toBe(1);
+    });
   });
 });
