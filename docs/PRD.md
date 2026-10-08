@@ -946,7 +946,7 @@ A mapping the user confirms or sets by hand is saved as `manual` and `locked`. R
 
 1. If a ProviderMapping exists for the provider record, use it. This keeps the link intact through time changes and postponements.
 2. If not, look for unmapped internal Events using the match key:
-   - team sports: sport + home team + away team + start date in the user's timezone
+   - team sports: sport + the two teams + start date in the user's timezone. The two teams are order-independent: a pair cannot meet twice with the venues swapped on one local date, so an Event entered with home and away the wrong way round still matches, and the scoreline is written in the Event's own orientation.
    - non-team sports: sport + league + normalized event name + start date
 3. Exactly one candidate: create an `auto` mapping.
 4. Zero or multiple candidates, such as an MLB doubleheader: create no mapping, and show a **Needs Match** indicator on the unmapped Event.

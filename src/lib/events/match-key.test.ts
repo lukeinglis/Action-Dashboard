@@ -21,7 +21,7 @@ describe("buildEventMatchKey", () => {
     ).toBeNull();
   });
 
-  it("builds a team-sport key from sport + home + away + local date", () => {
+  it("builds a team-sport key from sport + both teams + local date", () => {
     const key = buildEventMatchKey(
       {
         sport: "nfl",
@@ -32,7 +32,48 @@ describe("buildEventMatchKey", () => {
       },
       "America/New_York",
     );
-    expect(key).toBe("team|nfl|team-tb|team-min|2026-09-28");
+    expect(key).toBe("team|nfl|team-min|team-tb|2026-09-28");
+  });
+
+  it("builds the same team-sport key when home and away are reversed", () => {
+    const input = {
+      sport: "nfl",
+      name: "MIN @ TB",
+      startTimeUtc: "2026-09-28T20:05:00Z",
+    };
+    const asEntered = buildEventMatchKey(
+      { ...input, homeTeamId: "team-tb", awayTeamId: "team-min" },
+      "America/New_York",
+    );
+    const reversed = buildEventMatchKey(
+      { ...input, homeTeamId: "team-min", awayTeamId: "team-tb" },
+      "America/New_York",
+    );
+    expect(reversed).toBe(asEntered);
+  });
+
+  it("still separates the same pair on different local dates", () => {
+    const sunday = buildEventMatchKey(
+      {
+        sport: "nfl",
+        name: "MIN @ TB",
+        startTimeUtc: "2026-09-28T20:05:00Z",
+        homeTeamId: "team-tb",
+        awayTeamId: "team-min",
+      },
+      "America/New_York",
+    );
+    const laterMeeting = buildEventMatchKey(
+      {
+        sport: "nfl",
+        name: "TB @ MIN",
+        startTimeUtc: "2026-12-06T18:00:00Z",
+        homeTeamId: "team-min",
+        awayTeamId: "team-tb",
+      },
+      "America/New_York",
+    );
+    expect(laterMeeting).not.toBe(sunday);
   });
 
   it("builds a non-team key from sport + league + normalized name + local date", () => {

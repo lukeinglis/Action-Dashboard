@@ -159,7 +159,8 @@ export function NewEventForm({ teams: initialTeams }: { teams: Team[] }) {
       {duplicates?.status === "duplicates" && (
         <div className="space-y-2 rounded-lg border border-amber-800 bg-amber-950/30 p-4 text-sm">
           <p className="text-amber-300">
-            An Event with the same match key already exists:
+            This looks like the same Event as one that already exists. The name can
+            differ — the same two teams on the same date are one game:
           </p>
           <ul className="list-inside list-disc text-neutral-300">
             {duplicates.duplicates.map((d) => (

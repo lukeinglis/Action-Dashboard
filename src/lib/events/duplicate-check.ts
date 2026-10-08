@@ -22,7 +22,11 @@ export async function findDuplicateEvents(
   let query = supabase.from("events").select("*").eq("sport", candidate.sport);
 
   if (isTeamSport) {
-    query = query.eq("home_team_id", candidate.homeTeamId!).eq("away_team_id", candidate.awayTeamId!);
+    // Constrain both columns to the pair rather than to a fixed side, so an
+    // existing Event with the sides reversed still reaches the match-key
+    // filter below — the key itself is order-independent.
+    const pair = [candidate.homeTeamId!, candidate.awayTeamId!];
+    query = query.in("home_team_id", pair).in("away_team_id", pair);
   } else {
     query = candidate.league
       ? query.eq("league", candidate.league)

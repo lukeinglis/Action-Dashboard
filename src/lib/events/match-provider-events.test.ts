@@ -125,6 +125,22 @@ describe("matchProviderEvents", () => {
     );
   });
 
+  it("matches an Event whose home and away are reversed relative to the provider", () => {
+    // A plausible manual-entry mistake: the user typed the teams the wrong way
+    // round. On one local date the same pair cannot also meet with the venues
+    // swapped, so orientation adds no discriminating power — and keying on it
+    // left the Event silently never receiving live data.
+    const reversed = {
+      ...internalEvent,
+      name: "Panthers @ Lions",
+      homeTeamId: "team-det",
+      awayTeamId: "team-car",
+    };
+    const { matches } = matchProviderEvents([providerEvent()], context({ events: [reversed] }));
+
+    expect(matches[0].outcome).toEqual({ kind: "matched", eventId: "event-1" });
+  });
+
   it("prefers an existing mapping over the match key", () => {
     // The point of the mapping: a postponement moves the start date, which
     // breaks the match key, and the link has to survive that.

@@ -144,6 +144,25 @@ describe("applyProviderEvents", () => {
     });
   });
 
+  it("auto-matches a reversed Event and writes the scoreline the Event's way round", async () => {
+    // End-to-end proof that orientAutomaticFields is reachable from the
+    // auto-match path, not just from a pre-existing provider mapping: the
+    // Event stores Lions at home, the provider reports Panthers at home, so
+    // the Event's own home score is the Lions' 19 rather than the raw 29.
+    const fake = setup({
+      events: [eventRow({ name: "Panthers @ Lions", home_team_id: "team-det", away_team_id: "team-car" })],
+    });
+    const result = await run(fake, [providerEvent()]);
+
+    expect(result.needsMatch).toEqual([]);
+    expect(result.eventMappingsCreated).toBe(1);
+    expect(result.updated).toBe(1);
+
+    const event = fake.tables.events[0];
+    expect(event.automatic_home_score).toBe(19);
+    expect(event.automatic_away_score).toBe(29);
+  });
+
   it("never clears a manual override and keeps the automatic value underneath", async () => {
     const fake = setup({
       events: [eventRow({ manual_status: "final", manual_home_score: 31, manual_set_at: NOW })],
