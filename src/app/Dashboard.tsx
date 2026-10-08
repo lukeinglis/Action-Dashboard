@@ -12,6 +12,7 @@ import type {
   DashboardViewFilters,
   DashboardViewLayout,
   SortMode,
+  SportsRefreshState,
 } from "@/lib/types/domain";
 import type {
   DashboardTicketItem,
@@ -27,6 +28,7 @@ import { WhatDoINeedPane } from "./WhatDoINeedPane";
 import { FantasyPane } from "./FantasyPane";
 import { DFSPane } from "./DFSPane";
 import { ViewSwitcher } from "./ViewSwitcher";
+import { RefreshControl } from "./RefreshControl";
 
 const PANES: { value: DashboardPane; label: string }[] = [
   { value: "what_do_i_need", label: "What Do I Need?" },
@@ -46,6 +48,10 @@ interface Props {
   fantasyMatchups: FantasyMatchupPaneItem[];
   dfsEntries: DfsEntryPaneItem[];
   timeZone: string;
+  /** Per provider + sport freshness for the refresh control (§21). */
+  refreshStates: SportsRefreshState[];
+  staleOverrideCount: number;
+  unsupportedSports: string[];
 }
 
 export function Dashboard(props: Props) {
@@ -167,6 +173,12 @@ export function Dashboard(props: Props) {
           </div>
 
           <div className="ml-auto flex items-center gap-3 text-xs">
+            <RefreshControl
+              refreshStates={props.refreshStates}
+              staleOverrideCount={props.staleOverrideCount}
+              unsupportedSports={props.unsupportedSports}
+              timeZone={props.timeZone}
+            />
             <nav aria-label="Library" className="flex items-center gap-1">
               <Link
                 href="/events"

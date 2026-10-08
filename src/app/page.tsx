@@ -20,7 +20,16 @@ import { buildWhatDoINeed, relevantWhatDoINeedEntries, type OpenLegForPane } fro
 import { isLegLive, nextEvent } from "@/lib/tickets/bet-leg-events";
 import { resolveTicketCode, resolveTicketColor } from "@/lib/tickets/ticket-code";
 import { effectiveTicketStatus, legSettlement } from "@/lib/betting/derived-status";
-import { displayedAwayScore, displayedClock, displayedHomeScore, displayedPeriod, displayedStatus } from "@/lib/events/overrides";
+import {
+  displayedAwayScore,
+  displayedClock,
+  displayedHomeScore,
+  displayedPeriod,
+  displayedStatus,
+  isOverrideStale,
+} from "@/lib/events/overrides";
+import { listRefreshStates } from "@/lib/sports/refresh-state";
+import { resolveRefreshScope } from "@/lib/sports/refresh-scope";
 import {
   toBetLeg,
   toBetLegEvent,
@@ -72,11 +81,12 @@ export default async function Home() {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  const [preferences, defaultView, workspaceState, views] = await Promise.all([
+  const [preferences, defaultView, workspaceState, views, refreshStates] = await Promise.all([
     getUserPreferences(supabase, user.id),
     getOrCreateDefaultView(supabase, user.id),
     getWorkspaceState(supabase, user.id),
     listViews(supabase, user.id),
+    listRefreshStates(supabase, user.id),
   ]);
 
   const now = new Date();
@@ -276,6 +286,21 @@ export default async function Home() {
     isPinned: event.isPinned,
     exposureCount: totalExposureCount(event.id),
   }));
+
+  // Refresh control (docs/PRD.md section 22). The scope is resolved here purely
+  // to name the sports refresh will leave alone: scheduleEvents already carries
+  // the real exposure counts, so this is the most accurate statement of what is
+  // relevant that the app has. The refresh action re-resolves its own scope
+  // rather than trusting the client with how much quota to spend.
+  const { unsupportedSports } = resolveRefreshScope(scheduleEvents, timezone, {
+    sports: opening.filters.sports,
+    includePinned: opening.filters.includePinned,
+  });
+
+  // Overrides a newer automatic value has superseded (docs/PRD.md section 45).
+  // Counted across every Event, not just the rail: one that has drifted off the
+  // rail still needs resolving, and the Events library is where that happens.
+  const staleOverrideCount = events.filter(isOverrideStale).length;
 
   // Resolve the selected Event / fall back to All Active Tickets (docs/PRD.md section 46).
   const selectedEventRaw = opening.layout.selectedEventId ? eventById.get(opening.layout.selectedEventId) ?? null : null;
@@ -502,6 +527,9 @@ export default async function Home() {
       fantasyMatchups={fantasyMatchupPaneItems}
       dfsEntries={dfsEntryPaneItems}
       timeZone={timezone}
+      refreshStates={refreshStates}
+      staleOverrideCount={staleOverrideCount}
+      unsupportedSports={unsupportedSports}
     />
   );
 }
