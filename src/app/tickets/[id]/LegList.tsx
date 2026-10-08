@@ -2,7 +2,8 @@
 
 import { useTransition } from "react";
 import type { BetLeg, LegSettlement } from "@/lib/types/domain";
-import { legSettlement } from "@/lib/betting/derived-status";
+import { legLiveState, legSettlement } from "@/lib/betting/derived-status";
+import { LiveStateDot } from "@/app/components/LiveStateDot";
 import { deleteBetLeg, setManualLegStatus } from "@/app/tickets/actions";
 
 const SETTLEMENTS: LegSettlement[] = ["open", "won", "lost", "push", "void"];
@@ -29,9 +30,16 @@ export function LegList({ legs }: { legs: BetLeg[] }) {
                 {leg.oddsAmerican != null ? ` · ${leg.oddsAmerican > 0 ? "+" : ""}${leg.oddsAmerican}` : ""}
               </p>
             </div>
-            <span className="rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-300">
-              {legSettlement(leg)}
-            </span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {/* The arithmetic spelled out, since there is room for it here. */}
+              {leg.liveDetail && (
+                <span className="text-xs text-neutral-500">{leg.liveDetail}</span>
+              )}
+              <LiveStateDot state={legLiveState(leg)} detail={leg.liveDetail} />
+              <span className="rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-300">
+                {legSettlement(leg)}
+              </span>
+            </div>
           </div>
           <div className="mt-2 flex items-center gap-2 text-xs">
             <select

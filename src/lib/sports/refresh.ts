@@ -16,6 +16,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyProviderEvents } from "@/lib/events/apply-provider-events";
+import { updateLegStates } from "@/lib/betting/update-leg-states";
 import type { ProviderEvent, SportsProvider } from "@/lib/providers/types";
 import {
   claimRefreshLock,
@@ -53,6 +54,12 @@ export interface SportRefreshResult {
   /** Provider records with no single internal Event to write to (§20.2). */
   needsMatch: { providerEventId: string; name: string; candidateEventIds: string[] }[];
   lostMappingEventIds: string[];
+  /**
+   * Bet legs whose live state moved as a result of this refresh (§26.1). The
+   * number the user actually cares about: a refresh that updates a scoreline
+   * but no leg has not answered "is my ticket winning".
+   */
+  legsUpdated: number;
   error?: string;
 }
 
@@ -233,11 +240,17 @@ async function fetchAndApply(
   }
 
   try {
-    const applied = await applyProviderEvents(supabase, providerEvents, {
+    const { touchedEventIds, ...applied } = await applyProviderEvents(supabase, providerEvents, {
       userId,
       providerKey: provider.key,
       timeZone,
     });
+
+    // The second half of what the refresh button promises: carry the new
+    // scorelines through to the legs riding on them (§26.1). Kept inside the
+    // same try so a failure here is reported as a failed refresh rather than
+    // silently leaving legs stale behind updated Events.
+    const legs = await updateLegStates(supabase, { userId, eventIds: touchedEventIds });
 
     return {
       sport: scope.sport,
@@ -245,6 +258,7 @@ async function fetchAndApply(
       status: "refreshed",
       requestCount,
       ...applied,
+      legsUpdated: legs.updated,
     };
   } catch (error) {
     // Caught here rather than by the backstop so the requests already spent
@@ -295,6 +309,7 @@ function emptyResult(
     teamMappingsCreated: 0,
     needsMatch: [],
     lostMappingEventIds: [],
+    legsUpdated: 0,
     ...overrides,
   };
 }
