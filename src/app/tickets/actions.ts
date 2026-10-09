@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { syncTicketSettlement } from "@/lib/betting/settle-tickets";
 import type { BetLeg, BetLegEvent, BetLegSubject, Ticket, TicketStatus, LegSettlement, LiveLegState, MatchMethod, RootingDirection } from "@/lib/types/domain";
 import {
   createTicket as createTicketLib,
@@ -59,8 +60,12 @@ export async function updateTicket(ticketId: string, input: UpdateTicketInput): 
 
 export async function setManualTicketStatus(ticketId: string, status: TicketStatus | null): Promise<void> {
   const supabase = await createClient();
-  await requireUserId(supabase);
+  const userId = await requireUserId(supabase);
   await setManualTicketStatusLib(supabase, ticketId, status);
+  // §25 stamps settledAt against the *displayed* status, so a hand-set one
+  // closes the Ticket exactly as a graded leg does — and clearing the override
+  // back to null reopens it.
+  await syncTicketSettlement(supabase, { userId, ticketIds: [ticketId] });
   revalidatePath("/tickets");
   revalidatePath("/");
 }
@@ -105,8 +110,12 @@ export async function updateBetLeg(betLegId: string, input: UpdateBetLegInput): 
 
 export async function setManualLegStatus(betLegId: string, status: LegSettlement | null): Promise<void> {
   const supabase = await createClient();
-  await requireUserId(supabase);
+  const userId = await requireUserId(supabase);
   await setManualLegStatusLib(supabase, betLegId, status);
+  // Grading the last open leg by hand decides the Ticket, so it has to close it
+  // (§25) — otherwise only a provider refresh could, and the markets a user
+  // grades by hand are exactly the ones no provider settles.
+  await syncTicketSettlement(supabase, { userId, betLegIds: [betLegId] });
   revalidatePath("/tickets");
   revalidatePath("/");
 }

@@ -8,6 +8,11 @@ import type { EventStatus } from "@/lib/types/domain";
 
 const FINALIZED_STATUSES: EventStatus[] = ["final", "postponed", "cancelled"];
 
+/** True when an Event has reached a status no further refresh can move it off. */
+export function isFinalizedStatus(status: EventStatus | null | undefined): boolean {
+  return Boolean(status && FINALIZED_STATUSES.includes(status));
+}
+
 export interface ScheduleEventCandidate {
   id: string;
   status: EventStatus | null;
@@ -38,7 +43,7 @@ export function isScheduleRailEligible(
   // rest of the day. Without this, a slate vanishes as it starts: the default
   // date window opens at `now`, and nothing sets `in_progress` until provider
   // refresh exists (Phase 6), so status alone can't carry it.
-  const unfinished = !event.status || !FINALIZED_STATUSES.includes(event.status);
+  const unfinished = !isFinalizedStatus(event.status);
   if (start && unfinished && start.getTime() <= now.getTime()) {
     const dayStart = mostRecentRollover(now, timeZone, rolloverHour);
     if (start.getTime() >= dayStart.getTime()) return true;
@@ -50,7 +55,7 @@ export function isScheduleRailEligible(
     (start && end && start.getTime() <= dateWindow.start.getTime() && end.getTime() >= dateWindow.end.getTime());
   if (overlapsWindow) return true;
 
-  if (event.status && FINALIZED_STATUSES.includes(event.status) && event.statusChangedAt) {
+  if (isFinalizedStatus(event.status) && event.statusChangedAt) {
     const today = { start: mostRecentRollover(now, timeZone, rolloverHour), end: nextRollover(now, timeZone, rolloverHour) };
     if (isWithinRange(new Date(event.statusChangedAt), today)) return true;
   }
@@ -70,7 +75,7 @@ export function groupByState<T extends { id: string; status: EventStatus | null;
   for (const event of events) {
     if (event.status === "in_progress") {
       groups.set(event.id, "LIVE");
-    } else if (event.status && FINALIZED_STATUSES.includes(event.status)) {
+    } else if (isFinalizedStatus(event.status)) {
       groups.set(event.id, "FINAL");
     } else {
       upcoming.push(event);

@@ -18,6 +18,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyProviderEvents } from "@/lib/events/apply-provider-events";
 import { applyPlayerStats } from "@/lib/betting/apply-player-stats";
 import { updateLegStates } from "@/lib/betting/update-leg-states";
+import { syncTicketSettlement } from "@/lib/betting/settle-tickets";
 import type {
   PlayerStatsProvider,
   ProviderEvent,
@@ -66,6 +67,12 @@ export interface SportRefreshResult {
    * but no leg has not answered "is my ticket winning".
    */
   legsUpdated: number;
+  /**
+   * Tickets this refresh closed out: their last open leg graded, so §25's
+   * `settledAt` was stamped and the card leaves the dashboard at the next
+   * rollover. The end of what the refresh button promises.
+   */
+  ticketsSettled: number;
   /** Participant -> provider player mappings created by the stats provider (§20.2). */
   participantMappingsCreated: number;
   /** Prop participants the stats provider could not resolve to one player. */
@@ -298,6 +305,10 @@ async function fetchAndApply(
       playerStats: stats?.statsByParticipant,
     });
 
+    // The last link in the chain: a graded leg has to close the Ticket it
+    // belongs to, or the card stays on the dashboard forever (§25).
+    const tickets = await syncTicketSettlement(supabase, { userId, eventIds: touchedEventIds });
+
     return {
       sport: scope.sport,
       providerSport: scope.providerSport,
@@ -305,6 +316,7 @@ async function fetchAndApply(
       requestCount,
       ...applied,
       legsUpdated: legs.updated,
+      ticketsSettled: tickets.settled,
       participantMappingsCreated: stats?.participantMappingsCreated ?? 0,
       playersNeedingMatch: stats?.needsMatch ?? [],
       statsError: players.error,
@@ -397,6 +409,7 @@ function emptyResult(
     needsMatch: [],
     lostMappingEventIds: [],
     legsUpdated: 0,
+    ticketsSettled: 0,
     participantMappingsCreated: 0,
     playersNeedingMatch: [],
     ...overrides,

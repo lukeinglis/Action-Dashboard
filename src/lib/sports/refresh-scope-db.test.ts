@@ -48,6 +48,7 @@ function eventRow(overrides: Record<string, unknown> = {}) {
 function setup(tables: Record<string, Record<string, unknown>[]> = {}) {
   return createFakeSupabase({
     events: tables.events ?? [],
+    bet_legs: tables.bet_legs ?? [],
     bet_leg_events: tables.bet_leg_events ?? [],
     fantasy_roster_slots: tables.fantasy_roster_slots ?? [],
     dfs_lineup_slots: tables.dfs_lineup_slots ?? [],
@@ -134,6 +135,75 @@ describe("loadRefreshScope", () => {
           automatic_changed_at: "2026-09-28T23:30:00Z",
         }),
       ],
+      bet_leg_events: [{ id: "l-1", user_id: USER, bet_leg_id: "leg-1", event_id: "event-1" }],
+    });
+
+    const { scopes } = await load(fake);
+
+    expect(scopes).toEqual([]);
+  });
+
+  it("reaches back for a finished game whose bet never graded", async () => {
+    // The bug the user hit: a Sunday game viewed on a later day falls outside
+    // every rail rule, so refresh never fetched it, it never reached "final",
+    // and the leg riding on it could never settle. An ungraded bet keeps its
+    // Event in scope regardless of the date window on screen.
+    const fake = setup({
+      events: [eventRow({ start_time_utc: "2026-10-04T17:00:00Z", automatic_status: "scheduled" })],
+      bet_legs: [{ id: "leg-1", user_id: USER, ticket_id: "t-1", manual_status: null, automatic_status: null }],
+      bet_leg_events: [{ id: "l-1", user_id: USER, bet_leg_id: "leg-1", event_id: "event-1" }],
+    });
+
+    const { scopes } = await load(fake);
+
+    expect(scopes).toEqual([{ sport: "football", providerSport: "nfl", localDates: ["2026-10-04"] }]);
+  });
+
+  it("stops reaching back once the leg has graded", async () => {
+    // What keeps the carve-out from growing a game every week: an Event leaves
+    // it by being settled, not by aging out.
+    const fake = setup({
+      events: [eventRow({ start_time_utc: "2026-10-04T17:00:00Z", automatic_status: "scheduled" })],
+      bet_legs: [{ id: "leg-1", user_id: USER, ticket_id: "t-1", manual_status: null, automatic_status: "won" }],
+      bet_leg_events: [{ id: "l-1", user_id: USER, bet_leg_id: "leg-1", event_id: "event-1" }],
+    });
+
+    const { scopes } = await load(fake);
+
+    expect(scopes).toEqual([]);
+  });
+
+  it("gives up on an ungraded game older than the backfill window", async () => {
+    // A game no provider will ever resolve must not be re-fetched forever.
+    const fake = setup({
+      events: [eventRow({ start_time_utc: "2026-09-01T17:00:00Z", automatic_status: "scheduled" })],
+      bet_legs: [{ id: "leg-1", user_id: USER, ticket_id: "t-1", manual_status: null, automatic_status: null }],
+      bet_leg_events: [{ id: "l-1", user_id: USER, bet_leg_id: "leg-1", event_id: "event-1" }],
+    });
+
+    const { scopes } = await load(fake);
+
+    expect(scopes).toEqual([]);
+  });
+
+  it("does not reach back for a game that has not kicked off", async () => {
+    // Every bet on a future game is ungraded; without the start-time check the
+    // carve-out would pull in the entire schedule.
+    const fake = setup({
+      events: [eventRow({ start_time_utc: "2026-11-20T20:00:00Z", automatic_status: "scheduled" })],
+      bet_legs: [{ id: "leg-1", user_id: USER, ticket_id: "t-1", manual_status: null, automatic_status: null }],
+      bet_leg_events: [{ id: "l-1", user_id: USER, bet_leg_id: "leg-1", event_id: "event-1" }],
+    });
+
+    const { scopes } = await load(fake);
+
+    expect(scopes).toEqual([]);
+  });
+
+  it("does not reach back for a postponed game, which no score will settle", async () => {
+    const fake = setup({
+      events: [eventRow({ start_time_utc: "2026-10-04T17:00:00Z", automatic_status: "postponed" })],
+      bet_legs: [{ id: "leg-1", user_id: USER, ticket_id: "t-1", manual_status: null, automatic_status: null }],
       bet_leg_events: [{ id: "l-1", user_id: USER, bet_leg_id: "leg-1", event_id: "event-1" }],
     });
 
