@@ -29,6 +29,7 @@ function result(overrides: Partial<SportRefreshResult> = {}): SportRefreshResult
     unchanged: 0,
     eventMappingsCreated: 0,
     legsUpdated: 0,
+    ticketsSettled: 0,
     teamMappingsCreated: 0,
     needsMatch: [],
     lostMappingEventIds: [],

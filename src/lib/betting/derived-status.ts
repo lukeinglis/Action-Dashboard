@@ -15,6 +15,17 @@ export function legSettlement(leg: Pick<BetLeg, "manualStatus" | "automaticStatu
   return leg.manualStatus ?? leg.automaticStatus ?? "open";
 }
 
+const TERMINAL_TICKET_STATUSES: TicketStatus[] = ["won", "lost", "void", "cashed_out"];
+
+/**
+ * True when a Ticket's status is decided and nothing further is riding on it.
+ * This is what §25's `settledAt` is stamped against and what §8 moves out of
+ * the Active section.
+ */
+export function isTerminalTicketStatus(status: TicketStatus): boolean {
+  return TERMINAL_TICKET_STATUSES.includes(status);
+}
+
 /**
  * A leg's live state under the same §45 precedence as its settlement: a state
  * the user set by hand outranks the one refresh computed. "unknown" is the

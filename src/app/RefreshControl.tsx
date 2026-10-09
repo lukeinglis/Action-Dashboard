@@ -77,6 +77,7 @@ export function RefreshControl({ refreshStates, staleOverrideCount, unsupportedS
   const lines = freshnessLines(refreshStates, timeZone, lastResult?.results ?? []);
   const results = lastResult?.results ?? [];
   const legsUpdated = results.reduce((total, r) => total + r.legsUpdated, 0);
+  const ticketsSettled = results.reduce((total, r) => total + r.ticketsSettled, 0);
 
   // §22 degradation, made visible. The scores refreshed, so the sport's own
   // line reads "updated"; without this the props would just sit there with no
@@ -124,6 +125,14 @@ export function RefreshControl({ refreshStates, staleOverrideCount, unsupportedS
         {legsUpdated > 0 && (
           <span className="text-neutral-400">
             {legsUpdated} leg{legsUpdated === 1 ? "" : "s"} updated
+          </span>
+        )}
+
+        {/* §25: the tickets that just closed out. Worth its own line — it is
+            the difference between "the scores moved" and "this one is done". */}
+        {ticketsSettled > 0 && (
+          <span className="text-neutral-400">
+            {ticketsSettled} ticket{ticketsSettled === 1 ? "" : "s"} settled
           </span>
         )}
 

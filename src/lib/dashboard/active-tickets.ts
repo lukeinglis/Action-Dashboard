@@ -5,11 +5,10 @@
 // sortKey — so switching back to "manual" always restores the prior order.
 
 import { nextRollover } from "./date-window";
+import { isTerminalTicketStatus } from "@/lib/betting/derived-status";
 import type { SortMode, TicketStatus } from "@/lib/types/domain";
 
 export type TicketSection = "active" | "settled" | null;
-
-const SETTLED_STATUSES: TicketStatus[] = ["won", "lost", "void", "cashed_out"];
 
 /**
  * Which dashboard section a Ticket belongs in, or null if it should no
@@ -23,7 +22,7 @@ export function ticketSection(
   timeZone: string,
   rolloverHour: number,
 ): TicketSection {
-  if (!SETTLED_STATUSES.includes(status)) return "active";
+  if (!isTerminalTicketStatus(status)) return "active";
   if (!settledAt) return "settled";
 
   const cutoff = nextRollover(new Date(settledAt), timeZone, rolloverHour);
