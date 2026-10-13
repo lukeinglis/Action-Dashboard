@@ -2,8 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { toImportRecord, type ImportRecordRow } from "@/lib/db/rows";
-import { fetchMatchCandidates } from "@/lib/import/candidates";
-import type { ImportReview, DfsImportReview, FantasyImportReview } from "@/lib/import/pipeline";
+import { fetchDuplicateCandidates, fetchMatchCandidates } from "@/lib/import/candidates";
+import { getUserPreferences } from "@/lib/preferences/get-user-preferences";
+import {
+  buildImportReview,
+  type ImportReview,
+  type DfsImportReview,
+  type FantasyImportReview,
+} from "@/lib/import/pipeline";
 import { getImportRecordImageUrl } from "../actions";
 import { TranscribeForm } from "./TranscribeForm";
 import { ReviewForm } from "./ReviewForm";
@@ -43,10 +49,29 @@ export default async function InboxItemPage({ params }: { params: Promise<{ id: 
   const imageUrl = record.storagePath ? await getImportRecordImageUrl(record.storagePath) : null;
 
   const isReview = record.status === "needs_review" && record.parsedPayload;
-  const payload = isReview ? (record.parsedPayload as ParsedPayload) : null;
-  const eventOptions = isReview
-    ? (await fetchMatchCandidates(supabase, user.id)).events.map((e) => ({ id: e.id, name: e.name }))
-    : [];
+  const stored = isReview ? (record.parsedPayload as ParsedPayload) : null;
+  const candidates = isReview ? await fetchMatchCandidates(supabase, user.id) : null;
+  const eventOptions = candidates ? candidates.events.map((e) => ({ id: e.id, name: e.name })) : [];
+
+  // `parsed_payload` is a cache of a match computed at upload time. Re-matching
+  // from the extracted text means a record that has sat in the Inbox is
+  // approved against the Teams and Events the user has now, rather than
+  // against a proposal frozen before any of them existed.
+  let payload = stored;
+  if (stored?.kind === "bet_slip" && record.extractedText && candidates) {
+    try {
+      const [existingTickets, preferences] = await Promise.all([
+        fetchDuplicateCandidates(supabase, user.id),
+        getUserPreferences(supabase, user.id),
+      ]);
+      payload = {
+        kind: "bet_slip",
+        review: buildImportReview(record.extractedText, candidates, existingTickets, preferences.timezone),
+      };
+    } catch {
+      // This text parsed once already; a stale proposal beats an error page.
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-6">

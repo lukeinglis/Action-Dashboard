@@ -62,6 +62,19 @@ describe("defaultSubjectDirection", () => {
     expect(defaultSubjectDirection("anytime_touchdown", "primary", "no")).toBe("against");
   });
 
+  it("touchdown scorer: backed even though the slip prints no Over/Under", () => {
+    // There is no Under side to print, so these arrive with overUnder absent.
+    // Left neutral they graded to nothing at all: grading reads Over/Under
+    // back off the direction.
+    expect(defaultSubjectDirection("anytime_touchdown", "primary")).toBe("for");
+    expect(defaultSubjectDirection("first_touchdown", "primary")).toBe("for");
+    // A printed direction still wins over the implied one.
+    expect(defaultSubjectDirection("anytime_touchdown", "primary", "no")).toBe("against");
+    // Markets that do have a real Under stay neutral until one is parsed.
+    expect(defaultSubjectDirection("passing_yards", "primary")).toBe("neutral");
+    expect(defaultSubjectDirection("player_touchdowns", "primary")).toBe("neutral");
+  });
+
   it("winner/top_finish/season_future: selection for", () => {
     expect(defaultSubjectDirection("winner", "primary")).toBe("for");
     expect(defaultSubjectDirection("top_finish", "primary")).toBe("for");

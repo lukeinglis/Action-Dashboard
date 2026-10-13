@@ -30,6 +30,8 @@ import {
   type ApprovedFantasyMatchupGroup,
 } from "@/lib/import/pipeline";
 import { fetchDuplicateCandidates, fetchMatchCandidates, fetchPlayerSlotCandidates } from "@/lib/import/candidates";
+import { cachedScheduleLoader, resolveLegEventId, type LegEventDeps } from "@/lib/import/leg-events";
+import { EspnProvider } from "@/lib/providers/espn";
 import { createDfsLineup } from "@/lib/dfs/lineups";
 import { createDfsLineupSlot } from "@/lib/dfs/lineup-slots";
 import { createDfsEntry } from "@/lib/dfs/entries";
@@ -233,6 +235,16 @@ export async function approveParsedImport(
   const supabase = await createClient();
   const userId = await requireUserId(supabase);
 
+  // Only pay for the team list when some leg actually needs an Event created.
+  const needsEvents = groups.some((g) => g.legs.some((l) => !l.eventId && l.matchup));
+  const legEventDeps: LegEventDeps | null = needsEvents
+    ? {
+        teams: (await fetchMatchCandidates(supabase, userId)).teams,
+        loadSchedule: cachedScheduleLoader((sport) => EspnProvider.getSchedule({ sport })),
+        providerKey: EspnProvider.key,
+      }
+    : null;
+
   for (const group of groups) {
     if (group.legs.length === 0) continue;
 
@@ -260,8 +272,22 @@ export async function approveParsedImport(
         oddsAmerican: leg.oddsAmerican,
       });
 
-      if (leg.eventId) {
-        await linkBetLegEvent(supabase, userId, betLeg.id, leg.eventId, "auto");
+      // A leg whose game the user never entered by hand matched no Event, and
+      // BetLeg does not persist the team names — so without creating the Event
+      // here the matchup is gone for good and the leg can never be graded.
+      let eventId = leg.eventId;
+      if (!eventId && legEventDeps) {
+        try {
+          eventId = await resolveLegEventId(supabase, userId, leg, legEventDeps);
+        } catch {
+          // The Ticket is already saved; failing now would leave a half-written
+          // approval. An unlinked leg is the pre-existing behaviour and the
+          // user can still point it at a game by hand.
+          eventId = undefined;
+        }
+      }
+      if (eventId) {
+        await linkBetLegEvent(supabase, userId, betLeg.id, eventId, "auto");
       }
       for (const subject of leg.subjects) {
         // A prop's player may not exist yet — this is the only place in the app

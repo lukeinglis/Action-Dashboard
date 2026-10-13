@@ -72,7 +72,7 @@ export interface LegMatch {
 // Extraction can't always determine Sport (docs/PRD.md section 30 note on
 // Sport inference) — when the parsed leg's sport is unknown, fall back to
 // matching by name alone rather than failing to match at all.
-function findTeam(name: string, sport: string, teams: TeamCandidate[]): TeamCandidate | undefined {
+export function findTeam(name: string, sport: string, teams: TeamCandidate[]): TeamCandidate | undefined {
   const norm = normalizeEventName(name);
   const sportOk = (t: TeamCandidate) => !sport || t.sport === sport;
 
@@ -107,6 +107,34 @@ function findParticipant(
 function sameName(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false;
   return normalizeEventName(a) === normalizeEventName(b);
+}
+
+/**
+ * The team a spread/moneyline selection names, tolerating the line printed
+ * alongside it.
+ *
+ * Books print a spread selection as "LV Raiders +3.5" and only sometimes
+ * repeat the team under its own Subject line. Matching the whole string finds
+ * no team, which left the leg's primary subject as that raw text with no
+ * teamId — and grading reads the backed team off exactly that subject, so
+ * every spread leg was silently ungradeable.
+ *
+ * The full name is tried first so a team whose name genuinely ends in a
+ * number keeps matching.
+ */
+function findSelectionTeam(
+  name: string,
+  sport: string,
+  teams: TeamCandidate[],
+): { team?: TeamCandidate; name: string } {
+  const exact = findTeam(name, sport, teams);
+  if (exact) return { team: exact, name };
+
+  const withoutLine = name.replace(/\s*[+-]?\d+(?:\.\d+)?\s*$/, "").trim();
+  if (!withoutLine || withoutLine === name) return { name };
+
+  const team = findTeam(withoutLine, sport, teams);
+  return team ? { team, name: withoutLine } : { name };
 }
 
 export function matchParsedLeg(leg: ParsedLeg, candidates: MatchCandidates, timeZone: string): LegMatch {
@@ -177,9 +205,9 @@ export function matchParsedLeg(leg: ParsedLeg, candidates: MatchCandidates, time
   }
 
   const subjects: SubjectProposal[] = [];
-  function propose(name: string | undefined, role: "primary" | "opponent") {
+  function propose(name: string | undefined, role: "primary" | "opponent", resolved?: TeamCandidate) {
     if (!name) return;
-    const team = findTeam(name, leg.sport, candidates.teams);
+    const team = resolved ?? findTeam(name, leg.sport, candidates.teams);
     const participant = team ? undefined : findParticipant(name, leg.sport, candidates.participants);
     const unmatchedPlayer = !team && !participant && category === "player_over_under";
     subjects.push({
@@ -200,11 +228,20 @@ export function matchParsedLeg(leg: ParsedLeg, candidates: MatchCandidates, time
       propose(leg.homeTeamName, "primary");
       break;
     case "team_vs_opponent": {
-      const primaryName = leg.subject ?? leg.selection;
-      propose(primaryName, "primary");
-      const opponentName = [leg.awayTeamName, leg.homeTeamName].find(
-        (n) => n && !sameName(n, primaryName),
-      );
+      const primary = findSelectionTeam(leg.subject ?? leg.selection, leg.sport, candidates.teams);
+      propose(primary.name, "primary", primary.team);
+
+      // Pick the opposite side by team identity, not by comparing the printed
+      // strings. A slip writes the event as "LV @ NE" but the selection as
+      // "LV Raiders", and those two spellings are not equal as text — so the
+      // side actually bet on was taken for the opponent and proposed
+      // "against", leaving the ticket rooting against its own pick and never
+      // recording the real opponent at all.
+      const opponentName = primary.team
+        ? [leg.awayTeamName, leg.homeTeamName].find(
+            (n) => n && findTeam(n, leg.sport, candidates.teams)?.id !== primary.team!.id,
+          )
+        : [leg.awayTeamName, leg.homeTeamName].find((n) => n && !sameName(n, primary.name));
       propose(opponentName, "opponent");
       break;
     }

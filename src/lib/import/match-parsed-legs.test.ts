@@ -47,6 +47,53 @@ describe("matchParsedLeg", () => {
     ]);
   });
 
+  it("opposes the other side when the slip abbreviates the Event but not the selection", () => {
+    // A real slip writes "Event: KC @ BUF" with "Selection: KC Chiefs".
+    // Compared as text those are different teams, so the side actually bet on
+    // was taken for the opponent: the ticket ended up both for and against
+    // Kansas City and never recorded Buffalo at all.
+    const match = matchParsedLeg(
+      leg({ selection: "KC Chiefs", awayTeamName: "KC", homeTeamName: "BUF" }),
+      candidates,
+      TZ,
+    );
+    expect(match.subjects).toEqual([
+      { name: "KC Chiefs", teamId: "team-chiefs", participantId: undefined, matched: true, direction: "for" },
+      { name: "BUF", teamId: "team-bills", participantId: undefined, matched: true, direction: "against" },
+    ]);
+  });
+
+  it("reads the backed team off a spread selection that carries its own line", () => {
+    // Grading finds the backed team on the "for" subject, so leaving the
+    // primary as the raw "KC Chiefs +9.5" with no teamId made every spread
+    // leg ungradeable — and promoted the real pick to the opponent.
+    const match = matchParsedLeg(
+      leg({
+        marketType: "spread",
+        selection: "KC Chiefs +9.5",
+        line: 9.5,
+        overUnder: "over",
+        awayTeamName: "Kansas City Chiefs",
+        homeTeamName: "Buffalo Bills",
+      }),
+      candidates,
+      TZ,
+    );
+    expect(match.subjects).toEqual([
+      { name: "KC Chiefs", teamId: "team-chiefs", participantId: undefined, matched: true, direction: "for" },
+      { name: "Buffalo Bills", teamId: "team-bills", participantId: undefined, matched: true, direction: "against" },
+    ]);
+  });
+
+  it("keeps the whole selection when stripping a trailing number finds no team", () => {
+    const match = matchParsedLeg(
+      leg({ marketType: "spread", selection: "Some Other Team +3", awayTeamName: "KC", homeTeamName: "BUF" }),
+      candidates,
+      TZ,
+    );
+    expect(match.subjects[0]).toMatchObject({ name: "Some Other Team +3", matched: false });
+  });
+
   it("flags an unmatched Event when the team names aren't in the candidate list", () => {
     const match = matchParsedLeg(
       leg({ awayTeamName: "Some Other Team", homeTeamName: "Another Team" }),

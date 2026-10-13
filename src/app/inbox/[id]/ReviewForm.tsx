@@ -25,6 +25,9 @@ interface LegState {
   eventId?: string;
   eventExpected: boolean;
   eventMatched: boolean;
+  awayTeamName?: string;
+  homeTeamName?: string;
+  startTimeUtc?: string;
   subjects: Array<{
     name: string;
     teamId?: string;
@@ -82,6 +85,9 @@ function initialGroups(review: ImportReview): GroupState[] {
         eventId: match.eventId,
         eventExpected: match.eventExpected,
         eventMatched: match.eventMatched,
+        awayTeamName: leg.awayTeamName,
+        homeTeamName: leg.homeTeamName,
+        startTimeUtc: leg.startTimeUtc,
         subjects: match.subjects,
         selected: false,
       };
@@ -183,6 +189,16 @@ export function ReviewForm({
           line: leg.line,
           oddsAmerican: leg.oddsAmerican,
           eventId: leg.eventId,
+          // Sent even when the Event matched, so a leg the user re-pointed at
+          // a different Event still carries the matchup it was parsed from.
+          matchup:
+            leg.awayTeamName && leg.homeTeamName
+              ? {
+                  awayTeamName: leg.awayTeamName,
+                  homeTeamName: leg.homeTeamName,
+                  startTimeUtc: leg.startTimeUtc,
+                }
+              : undefined,
           // An unmatched subject used to be dropped here, which on a player
           // prop silently discarded the player *and* the Over/Under the
           // direction encodes (§26.2). A prop's subject can only be a player,
