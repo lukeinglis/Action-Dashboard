@@ -90,7 +90,20 @@ export interface ApprovedLeg {
   line?: number;
   oddsAmerican?: number;
   eventId?: string;
+  /**
+   * The teams the slip named, carried through so approval can create the Event
+   * when `eventId` is absent (see `ensureEvent`). BetLeg does not persist team
+   * names, so this is the last point at which the matchup still exists.
+   */
+  matchup?: ApprovedMatchup;
   subjects: ApprovedSubject[];
+}
+
+export interface ApprovedMatchup {
+  awayTeamName: string;
+  homeTeamName: string;
+  /** Only when the slip printed a kickoff; real screenshots usually don't. */
+  startTimeUtc?: string;
 }
 
 export interface ApprovedSubject {

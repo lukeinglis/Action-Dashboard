@@ -58,6 +58,17 @@ export function marketCategory(marketType: string): MarketCategory {
   return MARKET_CATEGORY[marketType] ?? "neutral";
 }
 
+/**
+ * Markets with no Under side, where the bet is implicitly "yes".
+ *
+ * A slip prints no Over/Under for these — there is nothing to print, you
+ * cannot back a player *not* to score — so the generic player-prop rule
+ * below would leave them neutral. Neutral is unreadable downstream:
+ * grading reads Over/Under back off the direction, so a neutral touchdown
+ * leg produced no state at all rather than a wrong one.
+ */
+const IMPLICIT_YES_MARKETS = new Set(["anytime_touchdown", "first_touchdown"]);
+
 /** Player props never propose a team-level subject; every other category allows either kind. */
 export function allowsTeamSubject(marketType: string): boolean {
   return marketCategory(marketType) !== "player_over_under";
@@ -75,7 +86,7 @@ export function defaultSubjectDirection(
     case "game_total":
     case "team_total":
     case "player_over_under":
-      if (!overUnder) return "neutral";
+      if (!overUnder) return IMPLICIT_YES_MARKETS.has(marketType) ? "for" : "neutral";
       return overUnder === "over" || overUnder === "yes" ? "for" : "against";
     case "selection_only":
       return role === "primary" ? "for" : "neutral";
