@@ -16,6 +16,8 @@ import { EspnProvider } from "@/lib/providers/espn";
 import { SleeperProvider } from "@/lib/providers/sleeper";
 import { loadRefreshScope } from "@/lib/sports/refresh-scope-db";
 import { refreshSportsData } from "@/lib/sports/refresh";
+import { loadRepairableLegs, repairLegs, type RepairLegsResult } from "@/lib/betting/repair-legs";
+import { fetchMatchCandidates } from "@/lib/import/candidates";
 import type { DashboardView, DashboardViewFilters, DashboardViewLayout, WorkspaceState } from "@/lib/types/domain";
 import type { RefreshSportsResult } from "./types";
 
@@ -113,6 +115,13 @@ export async function refreshSports(): Promise<RefreshSportsResult> {
     now,
   });
 
+  // Before grading, not after. A leg's Event link and Subjects are proposed
+  // once at import approval and never revisited, so a matcher fix never reaches
+  // rows already saved — and one of those bugs stored the *backed* team as
+  // "against", which grades a win as a loss. Repairing first is what keeps this
+  // press from writing a confidently wrong settlement over the user's data.
+  const legRepair = await repairImportedLegs(supabase, userId, timezone);
+
   const result = await refreshSportsData(supabase, {
     userId,
     timeZone: timezone,
@@ -125,5 +134,30 @@ export async function refreshSports(): Promise<RefreshSportsResult> {
   });
 
   revalidatePath("/");
-  return { ...result, unsupportedSports };
+  return { ...result, unsupportedSports, legRepair };
+}
+
+/**
+ * Re-derives saved legs' Event links and Subjects from the slip text they were
+ * imported from (see `repairLegs`).
+ *
+ * Swallows its own failure for the same reason the provider calls do (§22): a
+ * refresh that cannot repair must still fetch scores and leave the dashboard
+ * usable. Returning a zeroed result reports "nothing repaired", which is the
+ * truth, rather than claiming a fix that did not happen.
+ */
+async function repairImportedLegs(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  timeZone: string,
+): Promise<RepairLegsResult> {
+  try {
+    const [legs, candidates] = await Promise.all([
+      loadRepairableLegs(supabase, userId),
+      fetchMatchCandidates(supabase, userId),
+    ]);
+    return await repairLegs(supabase, userId, legs, { candidates, timeZone });
+  } catch {
+    return { legsRepaired: 0, eventsLinked: 0, subjectsWritten: 0, futures: 0, unresolved: 0 };
+  }
 }

@@ -178,6 +178,25 @@ function parseOneLeg(legBlock: string, ticketRaw: string): ParsedLeg {
   };
 }
 
+/**
+ * Re-parses a single stored leg block.
+ *
+ * `BetLeg.rawDescription` is the verbatim block this parser was handed (see
+ * `parseOneLeg`'s `rawDescription`), so a leg saved before a matching fix can
+ * be run back through the current matcher without the original slip — which
+ * matters because BetLeg persists neither the team names nor the Over/Under.
+ *
+ * Returns null rather than throwing: a repair pass over rows that are already
+ * saved must skip what it cannot read, not fail the whole operation.
+ */
+export function parseLegBlock(legBlock: string): ParsedLeg | null {
+  try {
+    return parseOneLeg(legBlock, legBlock);
+  } catch {
+    return null;
+  }
+}
+
 function parseOneTicket(ticketRaw: string): ParsedTicket {
   const idMatch = ticketRaw.match(/^Bet Slip(?:\s*#(\S+))?\s*$/m);
   const sportsbookTicketId = idMatch?.[1];

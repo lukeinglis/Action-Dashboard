@@ -87,11 +87,32 @@ export function findTeam(name: string, sport: string, teams: TeamCandidate[]): T
   // (e.g. "JAX Jaguars") rather than the full name ("Jacksonville Jaguars")
   // or the bare abbreviation ("JAX") — neither of which the exact check
   // above matches. Recognize that hybrid form against each candidate.
-  return teams.find((t) => {
+  const hybrid = teams.find((t) => {
     if (!sportOk(t) || !t.abbreviation) return false;
     const mascot = t.name.trim().split(/\s+/).pop();
     if (!mascot) return false;
     return norm === normalizeEventName(`${t.abbreviation} ${mascot}`);
+  });
+  if (hybrid) return hybrid;
+
+  // The same hybrid, but shortened by the *city's* initials rather than the
+  // team's abbreviation: a slip says "LA Rams" and "NY Giants" where the
+  // abbreviations are "LAR" and "NYG", so the check above misses them.
+  //
+  // Worth its own pass because the failure is silent and inverted rather than
+  // merely unmatched: with no team on the selection, `matchParsedLeg` falls
+  // back to comparing printed strings, picks the backed side as the opponent,
+  // and the leg ends up rooting against the team the user bet on.
+  //
+  // The mascot has to match too, which is what makes this unambiguous — two
+  // teams can share a city, never a city and a mascot.
+  return teams.find((t) => {
+    if (!sportOk(t)) return false;
+    const words = t.name.trim().split(/\s+/);
+    if (words.length < 2) return false;
+    const mascot = words[words.length - 1];
+    const initials = words.slice(0, -1).map((w) => w[0]).join("");
+    return norm === normalizeEventName(`${initials} ${mascot}`);
   });
 }
 
