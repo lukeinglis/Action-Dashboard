@@ -87,6 +87,17 @@ export function RefreshControl({ refreshStates, staleOverrideCount, unsupportedS
   // §20.2: a prop whose player resolved to several candidates. Named rather
   // than counted — the name is what the user needs in order to correct it.
   const playersNeedingMatch = results.flatMap((r) => r.playersNeedingMatch.map((p) => p.name));
+
+  // Legs whose stored Event link or Subjects the current matcher disagreed
+  // with, put right before grading ran (see `repairLegs`).
+  const legsRepaired = lastResult?.legRepair.legsRepaired ?? 0;
+
+  // Legs no refresh will ever settle: an outright with no game behind it, or a
+  // game on teams we don't carry. Counted together because the user's next move
+  // is the same for both — settle it by hand on the ticket.
+  const needsHandSettling =
+    (lastResult?.legRepair.futures ?? 0) + (lastResult?.legRepair.unresolved ?? 0);
+
   const quota = lastResult?.quota;
   const quotaWarning =
     quota && quota.limit != null && quota.status !== "ok"
@@ -134,6 +145,24 @@ export function RefreshControl({ refreshStates, staleOverrideCount, unsupportedS
           <span className="text-neutral-400">
             {ticketsSettled} ticket{ticketsSettled === 1 ? "" : "s"} settled
           </span>
+        )}
+
+        {/* A leg matched at import can be wrong in a way no score fixes — most
+            sharply, rooting against the team actually backed. Reported because
+            a silent correction to the user's own bets would be worse. */}
+        {legsRepaired > 0 && (
+          <span className="text-neutral-400">
+            {legsRepaired} leg{legsRepaired === 1 ? "" : "s"} relinked
+          </span>
+        )}
+
+        {/* The honest leftover: these will still be open after the next
+            refresh, and after every one after that, so point at where to
+            close them rather than letting them look merely slow. */}
+        {needsHandSettling > 0 && (
+          <Link href="/tickets" className="text-amber-300 underline decoration-dotted hover:text-amber-200">
+            {needsHandSettling} leg{needsHandSettling === 1 ? "" : "s"} need settling by hand
+          </Link>
         )}
 
         {statsUnavailable && <span className="text-amber-300">player stats unavailable</span>}

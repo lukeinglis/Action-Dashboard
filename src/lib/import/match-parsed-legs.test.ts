@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchParsedLeg, type MatchCandidates } from "./match-parsed-legs";
+import { findTeam, matchParsedLeg, type MatchCandidates } from "./match-parsed-legs";
 import type { ParsedLeg } from "./parse-slip-text";
 
 const TZ = "America/New_York";
@@ -263,5 +263,41 @@ describe("matchParsedLeg", () => {
       { name: "Patrick Mahomes", teamId: undefined, participantId: "part-mahomes", matched: true, direction: "for" },
       { name: "Buffalo Bills", teamId: "team-bills", participantId: undefined, matched: true, direction: "against" },
     ]);
+  });
+});
+
+describe("findTeam", () => {
+  const rams = { id: "team-rams", sport: "football", name: "Los Angeles Rams", abbreviation: "LAR" };
+  const chargers = { id: "team-chargers", sport: "football", name: "Los Angeles Chargers", abbreviation: "LAC" };
+  const giants = { id: "team-giants", sport: "football", name: "New York Giants", abbreviation: "NYG" };
+  const jets = { id: "team-jets", sport: "football", name: "New York Jets", abbreviation: "NYJ" };
+  const nfl = [rams, chargers, giants, jets, chiefs, bills];
+
+  it("matches a selection shortened by the city's initials rather than the abbreviation", () => {
+    // "LA Rams" equals neither the full name, nor "LAR", nor the "LAR Rams"
+    // hybrid, so all three earlier passes miss it. The consequence is worse
+    // than an unmatched leg: with no team on the selection the matcher compares
+    // printed strings, takes the backed side for the opponent, and the leg ends
+    // up rooting *against* the team the user bet on.
+    expect(findTeam("LA Rams", "football", nfl)?.id).toBe("team-rams");
+    expect(findTeam("NY Giants", "football", nfl)?.id).toBe("team-giants");
+  });
+
+  it("keeps same-city teams apart, which is what makes the shortening safe", () => {
+    // Two teams can share a city, never a city and a mascot — so requiring the
+    // mascot to match leaves "LA Rams" vs "LA Chargers" unambiguous.
+    expect(findTeam("LA Chargers", "football", nfl)?.id).toBe("team-chargers");
+    expect(findTeam("NY Jets", "football", nfl)?.id).toBe("team-jets");
+  });
+
+  it("still prefers the abbreviation hybrid and the full name", () => {
+    expect(findTeam("KC Chiefs", "football", nfl)?.id).toBe("team-chiefs");
+    expect(findTeam("Buffalo Bills", "football", nfl)?.id).toBe("team-bills");
+    expect(findTeam("BUF", "football", nfl)?.id).toBe("team-bills");
+  });
+
+  it("does not invent a match for a city alone", () => {
+    expect(findTeam("LA", "football", nfl)).toBeUndefined();
+    expect(findTeam("New York", "football", nfl)).toBeUndefined();
   });
 });

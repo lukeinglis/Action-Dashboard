@@ -3,6 +3,7 @@
 // reorder/regroup them (pure functions from src/lib/dashboard), never
 // refetch, so interactions stay instant.
 
+import type { RepairLegsResult } from "@/lib/betting/repair-legs";
 import type { RootingLabel } from "@/lib/dashboard/exposure";
 import type { RefreshSportsDataResult } from "@/lib/sports/refresh";
 import type { TicketColor } from "@/lib/tickets/ticket-code";
@@ -17,6 +18,13 @@ import type { TicketWithStatus } from "./tickets/types";
 export interface RefreshSportsResult extends RefreshSportsDataResult {
   /** Relevant sports no adapter covers; the UI calls these manual-only (§23). */
   unsupportedSports: string[];
+  /**
+   * What the pre-grading leg repair did and what it could not reach. The
+   * leftovers matter as much as the fixes: a future or a leg on teams we don't
+   * carry will never grade itself, so the user has to be told it is waiting on
+   * them rather than on the next refresh.
+   */
+  legRepair: RepairLegsResult;
 }
 
 export interface ScheduleEventItem {
