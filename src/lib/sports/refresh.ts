@@ -15,7 +15,7 @@
 //   timeout    -> around the provider calls only, never around the writes.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { applyProviderEvents } from "@/lib/events/apply-provider-events";
+import { applyProviderEvents, type EventSlate } from "@/lib/events/apply-provider-events";
 import { applyPlayerStats } from "@/lib/betting/apply-player-stats";
 import { updateLegStates } from "@/lib/betting/update-leg-states";
 import { syncTicketSettlement } from "@/lib/betting/settle-tickets";
@@ -273,27 +273,32 @@ async function fetchAndApply(
     });
   }
 
-  // Player stats come from a different service, so they are fetched and
-  // degraded on their own: Sleeper being down must not cost the user their
-  // scorelines. Their requests are deliberately left out of `requestCount`,
-  // which counts against `provider`'s daily limit and not another service's.
-  const players = await fetchPlayerStats(scope, context);
-
   try {
-    const { touchedEventIds, ...applied } = await applyProviderEvents(supabase, providerEvents, {
-      userId,
-      providerKey: provider.key,
-      timeZone,
-    });
+    const { touchedEventIds, eventSlates, ...applied } = await applyProviderEvents(
+      supabase,
+      providerEvents,
+      { userId, providerKey: provider.key, timeZone },
+    );
 
-    const stats =
-      players.stats && context.statsProvider
-        ? await applyPlayerStats(supabase, players.stats, {
-            userId,
-            providerKey: context.statsProvider.key,
-            sport: scope.sport,
-          })
-        : null;
+    // Player stats come from a different service, so they are fetched and
+    // degraded on their own: Sleeper being down must not cost the user their
+    // scorelines. Their requests are deliberately left out of `requestCount`,
+    // which counts against `provider`'s daily limit and not another service's.
+    //
+    // Fetched *after* matching rather than alongside the scores, because which
+    // weeks to ask for is only known once the provider's games have been tied
+    // to Events.
+    const players = await fetchPlayerStats(scope, context, eventSlates);
+
+    const stats = context.statsProvider
+      ? await applyPlayerStatsBySlate(supabase, players.statsBySlate, {
+          userId,
+          providerKey: context.statsProvider.key,
+          sport: scope.sport,
+          eventSlates,
+          touchedEventIds,
+        })
+      : null;
 
     // The second half of what the refresh button promises: carry the new
     // scorelines through to the legs riding on them (§26.1). Kept inside the
@@ -302,7 +307,7 @@ async function fetchAndApply(
     const legs = await updateLegStates(supabase, {
       userId,
       eventIds: touchedEventIds,
-      playerStats: stats?.statsByParticipant,
+      playerStatsByEvent: stats?.statsByEvent,
     });
 
     // The last link in the chain: a graded leg has to close the Ticket it
@@ -333,7 +338,39 @@ async function fetchAndApply(
 }
 
 /**
- * This sport's player stat lines, or why there are none.
+ * One published stat slate, in the vocabulary the stats provider takes. The
+ * score provider reports the season as a year, the stats provider addresses it
+ * as a string, and this is the single place that reconciles them.
+ */
+interface StatSlate {
+  season: string;
+  week: number;
+  seasonType?: string;
+}
+
+/** `season/seasonType/week`, the identity of one slate. */
+function slateKey(slate: StatSlate): string {
+  return `${slate.season}/${slate.seasonType ?? "regular"}/${slate.week}`;
+}
+
+function toStatSlate(slate: EventSlate): StatSlate {
+  return { season: String(slate.season), week: slate.week, seasonType: slate.seasonType };
+}
+
+/**
+ * This sport's player stat lines, keyed by the slate they belong to, or why
+ * there are none.
+ *
+ * One request per distinct slate in the refresh, which is what makes settling a
+ * past week possible at all: stats are published per week, so a prop on a game
+ * from ten days ago can only be graded from that game's own week. Asking for
+ * the *current* week instead — as this did — returns another slate's numbers,
+ * or none at all before the next kickoff, which left every past prop silent and
+ * every ticket holding one permanently open.
+ *
+ * Falls back to the provider's current week when the score provider reported no
+ * slate for anything (another sport's adapter, or a refresh that matched no
+ * games), so a live slate keeps behaving as before.
  *
  * Never throws and never reports a failure as the sport's failure. A missing
  * stats provider, an unsupported sport, and a service that is down are the same
@@ -343,31 +380,103 @@ async function fetchAndApply(
 async function fetchPlayerStats(
   scope: SportScope,
   context: OneSportContext,
-): Promise<{ stats: ProviderPlayerStat[] | null; error?: string }> {
+  eventSlates: EventSlate[],
+): Promise<{ statsBySlate: Map<string, ProviderPlayerStat[]>; error?: string }> {
   const { statsProvider } = context;
+  const empty = new Map<string, ProviderPlayerStat[]>();
   if (!statsProvider || !statsProvider.supportsSport(scope.providerSport)) {
-    return { stats: null };
+    return { statsBySlate: empty };
   }
 
   const label = `${statsProvider.key} ${scope.providerSport}`;
   try {
-    // The current week has to be asked for rather than computed: the NFL week
-    // does not turn over at midnight, and a guess would fetch the wrong slate's
-    // numbers — which looks like a player who stopped accumulating.
-    const { season, week, seasonType } = await withTimeout(
-      statsProvider.getCurrentWeek(),
-      statsProvider.config.timeoutMs,
-      label,
-    );
-    const stats = await withTimeout(
-      statsProvider.getWeekPlayerStats({ season, week, seasonType }),
-      statsProvider.config.timeoutMs,
-      label,
-    );
-    return { stats };
+    const slates = new Map(eventSlates.map((s) => [slateKey(toStatSlate(s)), toStatSlate(s)]));
+    if (slates.size === 0) {
+      const current = await withTimeout(
+        statsProvider.getCurrentWeek(),
+        statsProvider.config.timeoutMs,
+        label,
+      );
+      slates.set(slateKey(current), current);
+    }
+
+    const statsBySlate = new Map<string, ProviderPlayerStat[]>();
+    for (const [key, slate] of slates) {
+      statsBySlate.set(
+        key,
+        await withTimeout(
+          statsProvider.getWeekPlayerStats(slate),
+          statsProvider.config.timeoutMs,
+          label,
+        ),
+      );
+    }
+    return { statsBySlate };
   } catch (error) {
-    return { stats: null, error: errorMessage(error) };
+    return { statsBySlate: empty, error: errorMessage(error) };
   }
+}
+
+/**
+ * Resolves each slate's stat lines and fans them back out per Event.
+ *
+ * The participant matching is per slate because that is how the numbers arrive,
+ * but a leg is linked to an Event, so the result has to be addressable the way
+ * updateLegStates reads it. Events sharing a week share the same map rather
+ * than a copy of it.
+ */
+async function applyPlayerStatsBySlate(
+  supabase: SupabaseClient,
+  statsBySlate: Map<string, ProviderPlayerStat[]>,
+  params: {
+    userId: string;
+    providerKey: string;
+    sport: string;
+    eventSlates: EventSlate[];
+    /** Used only for the no-slate fallback, where one fetch answers for all. */
+    touchedEventIds: string[];
+  },
+): Promise<{
+  statsByEvent: Map<string, Map<string, Record<string, number>>>;
+  participantMappingsCreated: number;
+  needsMatch: SportRefreshResult["playersNeedingMatch"];
+}> {
+  const bySlate = new Map<string, Map<string, Record<string, number>>>();
+  let participantMappingsCreated = 0;
+  const needsMatch = new Map<string, SportRefreshResult["playersNeedingMatch"][number]>();
+
+  for (const [key, stats] of statsBySlate) {
+    // Sequential on purpose: each call creates participant mappings and the
+    // next one must see them, or two slates would both try to claim the same
+    // participant and the second insert would collide.
+    const applied = await applyPlayerStats(supabase, stats, {
+      userId: params.userId,
+      providerKey: params.providerKey,
+      sport: params.sport,
+    });
+    bySlate.set(key, applied.statsByParticipant);
+    participantMappingsCreated += applied.participantMappingsCreated;
+    // Deduplicated: the same unresolved player would otherwise be reported once
+    // per week in scope.
+    for (const player of applied.needsMatch) needsMatch.set(player.participantId, player);
+  }
+
+  const statsByEvent = new Map<string, Map<string, Record<string, number>>>();
+
+  if (params.eventSlates.length === 0) {
+    // No slate reported, so the one set fetched is the only answer there is and
+    // it stands for every Event in the refresh — the behaviour before weeks
+    // were threaded through, kept for adapters that do not report them.
+    const only = [...bySlate.values()][0];
+    if (only) for (const eventId of params.touchedEventIds) statsByEvent.set(eventId, only);
+  } else {
+    for (const slate of params.eventSlates) {
+      const stats = bySlate.get(slateKey(toStatSlate(slate)));
+      if (stats) statsByEvent.set(slate.eventId, stats);
+    }
+  }
+
+  return { statsByEvent, participantMappingsCreated, needsMatch: [...needsMatch.values()] };
 }
 
 /** YYYY-MM-DD -> the compact YYYYMMDD form adapters take for a `date` param. */

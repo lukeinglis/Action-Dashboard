@@ -14,6 +14,7 @@ import {
   DEFAULT_PROVIDER_CONFIG,
   type ProviderEvent,
   type ProviderPlayerStat,
+  type SeasonType,
   type SportsProvider,
 } from "./types";
 import type { EventStatus } from "@/lib/types/domain";
@@ -112,6 +113,8 @@ interface EspnEvent {
   shortName?: string;
   date?: string;
   endDate?: string;
+  week?: { number?: number };
+  season?: { year?: number; type?: number };
   status?: {
     period?: number;
     displayClock?: string;
@@ -121,6 +124,21 @@ interface EspnEvent {
     competitors?: EspnCompetitor[];
     status?: EspnEvent["status"];
   }[];
+}
+
+/**
+ * ESPN's numeric season type -> the provider-neutral phase.
+ *
+ * Only the three phases a stat line can belong to are mapped; anything else
+ * (ESPN also uses 4 for the Pro Bowl and 5 for offseason) yields undefined, so
+ * the caller falls back rather than asking a stats provider for a slate that
+ * does not exist.
+ */
+function mapSeasonType(type: number | undefined): SeasonType | undefined {
+  if (type === 1) return "pre";
+  if (type === 2) return "regular";
+  if (type === 3) return "post";
+  return undefined;
 }
 
 interface EspnScoreboard {
@@ -185,6 +203,13 @@ export function normalizeScoreboard(payload: unknown, sport: string): ProviderEv
       // and so does a game between quarters, where the period label says "END Q3".
       period: inProgress ? period : undefined,
       clock: inProgress && !isBetweenPeriods(typeName) && displayClock ? displayClock : undefined,
+      // The slate this game belongs to, which is what a stats provider keys a
+      // player's numbers by. Read off the event rather than the scoreboard's
+      // top-level `week`, so a payload spanning a week boundary still attributes
+      // each game correctly.
+      season: event.season?.year,
+      week: event.week?.number,
+      seasonType: mapSeasonType(event.season?.type),
     });
   }
 

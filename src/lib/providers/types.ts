@@ -23,7 +23,26 @@ export interface ProviderEvent {
   awayScore?: number;
   period?: string;
   clock?: string;
+  /**
+   * Which slate this game belongs to, when the provider says so.
+   *
+   * Needed because a player's stat line is published per week, not per game: to
+   * settle a prop on a game from ten days ago, the stats provider has to be
+   * asked for *that* game's week. Asking for the current week instead returns
+   * another slate's numbers, or — before the next kickoff — none at all, which
+   * leaves every prop on a past game silent forever (§26.1).
+   *
+   * Carried on the event rather than computed from its date on purpose: the NFL
+   * week does not turn over at midnight, so a date-to-week guess lands on the
+   * wrong slate around Thursday and Monday games.
+   */
+  season?: number;
+  week?: number;
+  /** Provider-neutral season phase, so adapters agree on more than a number. */
+  seasonType?: SeasonType;
 }
+
+export type SeasonType = "pre" | "regular" | "post";
 
 export interface ProviderConfig {
   minRefreshIntervalSeconds: number; // default 60

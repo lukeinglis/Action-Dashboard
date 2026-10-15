@@ -22,7 +22,7 @@ import {
 } from "./match-provider-events";
 import { toInternalSport } from "@/lib/sports/sport-keys";
 import type { EventRow } from "@/lib/db/rows";
-import type { ProviderEvent } from "@/lib/providers/types";
+import type { ProviderEvent, SeasonType } from "@/lib/providers/types";
 
 export interface ApplyProviderEventsResult {
   /** Events whose automatic values actually moved. */
@@ -43,6 +43,22 @@ export interface ApplyProviderEventsResult {
    * the next score.
    */
   touchedEventIds: string[];
+  /**
+   * The provider's slate for each touched Event, where it reported one.
+   *
+   * Player stats are published per week, so settling a prop on a game from last
+   * week means asking the stats provider for *that* week. Only the matching
+   * already done here knows which internal Event a provider record became, so
+   * this is where the two can be tied together.
+   */
+  eventSlates: EventSlate[];
+}
+
+export interface EventSlate {
+  eventId: string;
+  season: number;
+  week: number;
+  seasonType: SeasonType;
 }
 
 interface AutomaticFields {
@@ -113,6 +129,7 @@ export async function applyProviderEvents(
       needsMatch: [],
       lostMappingEventIds: [],
       touchedEventIds: [],
+      eventSlates: [],
     };
   }
 
@@ -138,6 +155,7 @@ export async function applyProviderEvents(
     needsMatch: [],
     lostMappingEventIds,
     touchedEventIds: [],
+    eventSlates: [],
   };
 
   // provider_mappings is unique on both (provider_key, provider_id) and
@@ -183,6 +201,14 @@ export async function applyProviderEvents(
     if (!row) continue;
 
     result.touchedEventIds.push(outcome.eventId);
+
+    // All three or nothing: a week number without the season it belongs to
+    // cannot address a stat line, and a partial slate would send the stats
+    // provider to the wrong year.
+    const { season, week, seasonType } = providerEvent;
+    if (season != null && week != null && seasonType != null) {
+      result.eventSlates.push({ eventId: outcome.eventId, season, week, seasonType });
+    }
 
     const next = orientAutomaticFields(match, row);
     if (!hasAutomaticChange(next, row)) {

@@ -56,6 +56,7 @@ function seed(options: SeedOptions = {}) {
   });
 }
 
+/** Stats are addressed per Event; these tests only ever seed one, so attach them to it. */
 function run(
   fake: ReturnType<typeof createFakeSupabase>,
   eventIds = [EVENT],
@@ -64,7 +65,7 @@ function run(
   return updateLegStates(fake as unknown as SupabaseClient, {
     userId: USER,
     eventIds,
-    playerStats,
+    playerStatsByEvent: playerStats ? new Map([[EVENT, playerStats]]) : undefined,
     now: () => "2026-10-08T20:30:00.000Z",
   });
 }
@@ -188,6 +189,74 @@ describe("updateLegStates", () => {
       updated: 0,
       unchanged: 1,
     });
+    expect(fake.tables.bet_legs[0].automatic_live_state).toBeNull();
+  });
+
+  it("grades each prop off the stat line for its own game, not another week's", async () => {
+    // The reason stats are keyed by Event at all. A refresh covering the
+    // settlement backfill spans several published weeks, and the same player has
+    // a different line in each. Sharing one map across them would settle a prop
+    // on an older game off the newest numbers.
+    const fake = createFakeSupabase({
+      bet_legs: [
+        { id: "leg-wk4", user_id: USER, market_type: "receiving_yards", line: 65.5 },
+        { id: "leg-wk5", user_id: USER, market_type: "receiving_yards", line: 65.5 },
+      ],
+      bet_leg_events: [
+        { id: "l-4", user_id: USER, bet_leg_id: "leg-wk4", event_id: "event-wk4", match_method: "auto" },
+        { id: "l-5", user_id: USER, bet_leg_id: "leg-wk5", event_id: "event-wk5", match_method: "auto" },
+      ],
+      bet_leg_subjects: [
+        { id: "s-4", user_id: USER, bet_leg_id: "leg-wk4", participant_id: "part-1", direction: "for" },
+        { id: "s-5", user_id: USER, bet_leg_id: "leg-wk5", participant_id: "part-1", direction: "for" },
+      ],
+      events: [
+        {
+          id: "event-wk4",
+          user_id: USER,
+          automatic_status: "final",
+          automatic_home_score: 21,
+          automatic_away_score: 17,
+        },
+        {
+          id: "event-wk5",
+          user_id: USER,
+          automatic_status: "final",
+          automatic_home_score: 24,
+          automatic_away_score: 10,
+        },
+      ],
+    });
+
+    await updateLegStates(fake as unknown as SupabaseClient, {
+      userId: USER,
+      eventIds: ["event-wk4", "event-wk5"],
+      playerStatsByEvent: new Map([
+        ["event-wk4", new Map([["part-1", { recYards: 72 }]])],
+        ["event-wk5", new Map([["part-1", { recYards: 31 }]])],
+      ]),
+      now: () => "2026-10-08T20:30:00.000Z",
+    });
+
+    const byId = new Map(fake.tables.bet_legs.map((l) => [l.id as string, l]));
+    expect(byId.get("leg-wk4")?.automatic_status).toBe("won");
+    expect(byId.get("leg-wk4")?.live_detail).toBe("72 rec yds of 65.5");
+    expect(byId.get("leg-wk5")?.automatic_status).toBe("lost");
+    expect(byId.get("leg-wk5")?.live_detail).toBe("31 rec yds of 65.5");
+  });
+
+  it("leaves a prop silent when the stats belong to a different game", async () => {
+    // A slate the stats provider had nothing for must not fall through to
+    // whichever week did return numbers.
+    const fake = propSeed("receiving_yards", 65.5);
+    const result = await updateLegStates(fake as unknown as SupabaseClient, {
+      userId: USER,
+      eventIds: [EVENT],
+      playerStatsByEvent: new Map([["event-elsewhere", new Map([["part-1", { recYards: 72 }]])]]),
+      now: () => "2026-10-08T20:30:00.000Z",
+    });
+
+    expect(result).toEqual({ updated: 0, unchanged: 1 });
     expect(fake.tables.bet_legs[0].automatic_live_state).toBeNull();
   });
 

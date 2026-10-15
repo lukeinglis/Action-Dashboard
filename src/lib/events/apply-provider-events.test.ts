@@ -322,6 +322,30 @@ describe("applyProviderEvents", () => {
     expect(event.automatic_away_score).toBeNull();
   });
 
+  it("ties the provider's slate to the Event it matched", async () => {
+    // Only the matching done here knows which internal Event a provider record
+    // became, so this is the one place the game's week can be attached to it.
+    // Without that, a prop on a past game gets asked about the current week.
+    const fake = setup({});
+    const result = await run(fake, [
+      providerEvent({ season: 2026, week: 4, seasonType: "regular" }),
+    ]);
+
+    expect(result.eventSlates).toEqual([
+      { eventId: "event-1", season: 2026, week: 4, seasonType: "regular" },
+    ]);
+  });
+
+  it("reports no slate for an Event the provider gave only part of one for", async () => {
+    // A week without its season cannot address a stat line, and guessing the
+    // year would send the stats provider to the wrong season entirely.
+    const fake = setup({});
+    const result = await run(fake, [providerEvent({ week: 4 })]);
+
+    expect(result.touchedEventIds).toEqual(["event-1"]);
+    expect(result.eventSlates).toEqual([]);
+  });
+
   it("short-circuits on an empty provider result without touching anything", async () => {
     const fake = setup({});
     const result = await run(fake, []);
