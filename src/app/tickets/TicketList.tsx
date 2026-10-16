@@ -1,6 +1,15 @@
 "use client";
 
-import { useState, useTransition } from "react";
+// The draggable Ticket list (§5.3).
+//
+// This list renders the cards the server sent, every time. The only thing it
+// keeps locally is the id order a drag just produced, held until the server's
+// own `sortKey` order catches up — see `applyPendingOrder`. Keeping the cards
+// themselves in state instead would mean a refresh that settles half the
+// tickets changes nothing on screen until a full page reload.
+
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   KeyboardSensor,
@@ -18,11 +27,18 @@ import {
 } from "@dnd-kit/sortable";
 import { reorderTicket } from "./actions";
 import { TicketCard } from "./TicketCard";
+import { applyPendingOrder } from "@/lib/tickets/pending-order";
 import type { TicketWithStatus } from "./types";
 
-export function TicketList({ items: initialItems }: { items: TicketWithStatus[] }) {
-  const [items, setItems] = useState(initialItems);
+export function TicketList({ items: serverItems }: { items: TicketWithStatus[] }) {
+  const [pendingIds, setPendingIds] = useState<string[] | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
+
+  const items = useMemo(
+    () => applyPendingOrder(serverItems, pendingIds, (i) => i.ticket.id),
+    [serverItems, pendingIds],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -38,17 +54,17 @@ export function TicketList({ items: initialItems }: { items: TicketWithStatus[] 
     if (oldIndex === -1 || newIndex === -1) return;
 
     const reordered = arrayMove(items, oldIndex, newIndex);
-    setItems(reordered);
+    setPendingIds(reordered.map((i) => i.ticket.id));
 
     const before = reordered[newIndex - 1]?.ticket.sortKey ?? null;
     const after = reordered[newIndex + 1]?.ticket.sortKey ?? null;
     const movedId = reordered[newIndex].ticket.id;
 
     startTransition(async () => {
-      const newKey = await reorderTicket(movedId, before, after);
-      setItems((prev) =>
-        prev.map((i) => (i.ticket.id === movedId ? { ...i, ticket: { ...i.ticket, sortKey: newKey } } : i)),
-      );
+      // The action revalidates, so the new order arrives as props; the pending
+      // override then matches the server and stops applying by itself.
+      await reorderTicket(movedId, before, after);
+      router.refresh();
     });
   }
 
@@ -65,7 +81,9 @@ export function TicketList({ items: initialItems }: { items: TicketWithStatus[] 
             <TicketCard
               key={item.ticket.id}
               item={item}
-              onDeleted={() => setItems((prev) => prev.filter((i) => i.ticket.id !== item.ticket.id))}
+              // Deletion is a server change like any other, so let
+              // revalidation remove the card rather than hiding it locally.
+              onDeleted={() => router.refresh()}
             />
           ))}
         </div>
