@@ -17,6 +17,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyProviderEvents, type EventSlate } from "@/lib/events/apply-provider-events";
 import { applyPlayerStats } from "@/lib/betting/apply-player-stats";
+import { applyScoringPlays, mergeStatsByEvent } from "@/lib/betting/apply-scoring-plays";
 import { updateLegStates } from "@/lib/betting/update-leg-states";
 import { syncTicketSettlement } from "@/lib/betting/settle-tickets";
 import type {
@@ -300,6 +301,19 @@ async function fetchAndApply(
         })
       : null;
 
+    // The markets that turn on *order* rather than totals — who scored first —
+    // come from a separate per-Event feed, and only for Events that carry such
+    // a leg. Its requests count against this provider's quota, since it is the
+    // same service that answered for the scores.
+    const scoring = await applyScoringPlays(supabase, provider, {
+      userId,
+      providerKey: provider.key,
+      providerSport: scope.providerSport,
+      sport: scope.sport,
+      eventIds: touchedEventIds,
+    });
+    requestCount += scoring.requestCount;
+
     // The second half of what the refresh button promises: carry the new
     // scorelines through to the legs riding on them (§26.1). Kept inside the
     // same try so a failure here is reported as a failed refresh rather than
@@ -307,7 +321,7 @@ async function fetchAndApply(
     const legs = await updateLegStates(supabase, {
       userId,
       eventIds: touchedEventIds,
-      playerStatsByEvent: stats?.statsByEvent,
+      playerStatsByEvent: mergeStatsByEvent(stats?.statsByEvent, scoring.statsByEvent),
     });
 
     // The last link in the chain: a graded leg has to close the Ticket it
@@ -324,7 +338,10 @@ async function fetchAndApply(
       ticketsSettled: tickets.settled,
       participantMappingsCreated: stats?.participantMappingsCreated ?? 0,
       playersNeedingMatch: stats?.needsMatch ?? [],
-      statsError: players.error,
+      // Both feeds answer the same question for the user — "why is my prop
+      // blank" — so they share the one non-blocking notice rather than
+      // sprouting a second line that means the same thing.
+      statsError: players.error ?? scoring.error,
     };
   } catch (error) {
     // Caught here rather than by the backstop so the requests already spent

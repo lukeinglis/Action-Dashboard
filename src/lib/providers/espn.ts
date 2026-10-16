@@ -14,6 +14,8 @@ import {
   DEFAULT_PROVIDER_CONFIG,
   type ProviderEvent,
   type ProviderPlayerStat,
+  type ProviderScoringPlay,
+  type ScoringPlayKind,
   type SeasonType,
   type SportsProvider,
 } from "./types";
@@ -287,6 +289,71 @@ export function normalizeBoxScore(payload: unknown, providerEventId: string): Pr
   return [...byPlayer.values()];
 }
 
+interface EspnScoringPlay {
+  type?: { text?: string };
+  text?: string;
+  period?: { number?: number };
+  clock?: { displayValue?: string };
+  team?: { id?: string; abbreviation?: string };
+}
+
+/**
+ * Which score this was. ESPN spells the type out in prose ("Rushing
+ * Touchdown", "Field Goal Good"), and adds wordings without notice, so this
+ * matches on the part that carries the meaning rather than on an exact name.
+ */
+function scoringPlayKind(typeText: string | undefined): ScoringPlayKind {
+  const text = (typeText ?? "").toLowerCase();
+  if (text.includes("touchdown")) return "touchdown";
+  if (text.includes("field goal")) return "field_goal";
+  return "other";
+}
+
+/**
+ * The player credited with the score, read out of ESPN's play text.
+ *
+ * There is no athlete id anywhere in an NFL scoring play, so the name in the
+ * prose is the only identification available. Every scoring wording ESPN uses
+ * leads with the scorer and then the yardage:
+ *
+ *   "Derrick Henry 5 Yd Rush (Tyler Loop Kick)"
+ *   "Zay Flowers 19 Yd pass from Lamar Jackson"      <- receiver scores
+ *   "Tyler Loop 64 Yd Field Goal"
+ *
+ * which is why the yardage is the delimiter. A wording this cannot read yields
+ * no name at all, which leaves the leg silent — the safe failure, since the
+ * alternative is grading a bet against the wrong player.
+ */
+export function scoringPlayScorer(text: string | undefined): string | undefined {
+  const match = /^(.+?)\s+-?\d+\s+Yd\b/i.exec(text ?? "");
+  return match?.[1]?.trim() || undefined;
+}
+
+/** `summary?event=` payload -> the game's scores in order. */
+export function normalizeScoringPlays(
+  payload: unknown,
+  providerEventId: string,
+): ProviderScoringPlay[] {
+  const plays = (payload as { scoringPlays?: EspnScoringPlay[] } | null)?.scoringPlays;
+  // Distinguished from a scoreless game on purpose: a payload with no
+  // scoringPlays key at all is a shape change or an error body, and must not
+  // be read as "nobody has scored" — which would settle every first-scorer leg
+  // as a loss.
+  if (!Array.isArray(plays)) {
+    throw new Error(`ESPN scoring plays ${providerEventId}: payload has no scoringPlays`);
+  }
+
+  return plays.map((play, i) => ({
+    sequence: i + 1,
+    kind: scoringPlayKind(play.type?.text),
+    scorerName: scoringPlayScorer(play.text),
+    teamAbbreviation: play.team?.abbreviation,
+    teamProviderId: play.team?.id,
+    period: play.period?.number,
+    clock: play.clock?.displayValue,
+  }));
+}
+
 async function fetchJson(url: string, timeoutMs: number): Promise<unknown> {
   const response = await fetch(url, {
     signal: AbortSignal.timeout(timeoutMs),
@@ -336,5 +403,19 @@ export const EspnProvider: SportsProvider = {
       EspnProvider.config.timeoutMs,
     );
     return normalizeBoxScore(payload, providerEventId);
+  },
+
+  async getScoringPlays(params: {
+    sport: string;
+    providerEventId: string;
+  }): Promise<ProviderScoringPlay[]> {
+    const path = SPORT_PATHS[params.sport];
+    if (!path) throw new Error(`ESPN: unsupported sport "${params.sport}"`);
+
+    const payload = await fetchJson(
+      `${BASE_URL}/${path}/summary?event=${params.providerEventId}`,
+      EspnProvider.config.timeoutMs,
+    );
+    return normalizeScoringPlays(payload, params.providerEventId);
   },
 };
