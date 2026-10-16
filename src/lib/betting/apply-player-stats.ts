@@ -158,10 +158,27 @@ async function loadPropParticipants(
   ];
   if (participantIds.length === 0) return [];
 
+  return loadParticipantCandidates(supabase, participantIds, params.sport);
+}
+
+/**
+ * Participants as the matching ladder wants them: name plus the team
+ * abbreviation that breaks a shared-surname tie.
+ *
+ * Shared with the scoring-order path, which resolves the same players against
+ * a different feed and must use the same ladder to reach the same answer.
+ */
+export async function loadParticipantCandidates(
+  supabase: SupabaseClient,
+  participantIds: string[],
+  sport: string,
+): Promise<ParticipantCandidate[]> {
+  if (participantIds.length === 0) return [];
+
   const { data: participantRows, error: participantError } = await supabase
     .from("participants")
     .select("id,name,sport,team_id")
-    .eq("sport", params.sport)
+    .eq("sport", sport)
     .in("id", participantIds);
   if (participantError) throw participantError;
 

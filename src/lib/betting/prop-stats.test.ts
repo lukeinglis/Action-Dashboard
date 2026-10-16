@@ -23,12 +23,25 @@ describe("propCurrentValue", () => {
     expect(propCurrentValue("receiving_yards", {})).toBe(0);
   });
 
-  it("is null for a market no stat line can answer", () => {
-    // Scoring *order* is not in a week stat line, and no provider is wired up
-    // for baseball. Both keep the leg silent rather than guessing.
-    expect(propCurrentValue("first_touchdown", { rushTd: 1 })).toBeNull();
+  it("is null for a market no provider can answer", () => {
+    // No stats provider is wired up for baseball, so the leg stays silent
+    // rather than being guessed at.
     expect(propCurrentValue("batter_home_runs", { homeRuns: 1 })).toBeNull();
     expect(propCurrentValue("moneyline", {})).toBeNull();
+  });
+
+  it("reads the first-scorer verdict the scoring feed supplies", () => {
+    expect(propCurrentValue("first_touchdown", { firstTd: 1 })).toBe(1);
+    expect(propCurrentValue("first_touchdown", { firstTd: 0 })).toBe(0);
+  });
+
+  it("is null, not zero, for a first-scorer prop the feed has not answered", () => {
+    // The dangerous case. A week stat line carries no `firstTd` at all, so
+    // treating its absence as zero would settle every first-scorer leg as a
+    // loss the moment any stat line arrived — including for the player who
+    // actually scored first.
+    expect(propCurrentValue("first_touchdown", { rushTd: 1 })).toBeNull();
+    expect(propCurrentValue("first_touchdown", {})).toBeNull();
   });
 });
 
@@ -52,15 +65,20 @@ describe("propLine", () => {
   });
 
   it("is null for an unsupported market, line or not", () => {
-    expect(propLine("first_touchdown", 0.5)).toBeNull();
+    expect(propLine("batter_home_runs", 0.5)).toBeNull();
+  });
+
+  it("implies over 0.5 for a first-scorer prop, which books print no line for", () => {
+    expect(propLine("first_touchdown", null)).toBe(0.5);
   });
 });
 
 describe("isSupportedProp", () => {
-  it("is true only for markets a stat line can answer", () => {
+  it("is true only for markets a provider can answer", () => {
     expect(isSupportedProp("receiving_yards")).toBe(true);
     expect(isSupportedProp("anytime_touchdown")).toBe(true);
-    expect(isSupportedProp("first_touchdown")).toBe(false);
+    // Answerable now — not from a stat line, but from the scoring feed.
+    expect(isSupportedProp("first_touchdown")).toBe(true);
     expect(isSupportedProp("spread")).toBe(false);
   });
 });

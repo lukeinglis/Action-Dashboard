@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatPeriod, mapEspnStatus, normalizeBoxScore, normalizeScoreboard } from "./espn";
+import {
+  formatPeriod,
+  mapEspnStatus,
+  normalizeBoxScore,
+  normalizeScoreboard,
+  normalizeScoringPlays,
+  scoringPlayScorer,
+} from "./espn";
 
 // Shapes and values below are trimmed from real payloads captured 2026-10-05.
 // See docs/api-evaluation.md section 3.
@@ -296,5 +303,93 @@ describe("normalizeBoxScore", () => {
 
   it("throws when the payload has no boxscore.players", () => {
     expect(() => normalizeBoxScore({ boxscore: {} }, "401872978")).toThrow(/no boxscore.players/);
+  });
+});
+
+describe("scoringPlayScorer", () => {
+  // Every wording below is verbatim from the TEN @ BAL feed, 2026-10-04.
+  it("reads the scorer off a rushing touchdown", () => {
+    expect(scoringPlayScorer("Derrick Henry 5 Yd Rush (Tyler Loop Kick)")).toBe("Derrick Henry");
+  });
+
+  it("credits the receiver, not the quarterback, on a passing touchdown", () => {
+    // The scorer leads the text and the passer follows it, which is the whole
+    // reason the yardage is the delimiter.
+    expect(scoringPlayScorer("Zay Flowers 19 Yd pass from Lamar Jackson (Tyler Loop Kick)")).toBe(
+      "Zay Flowers",
+    );
+  });
+
+  it("handles an apostrophe in a name", () => {
+    expect(scoringPlayScorer("Wan'Dale Robinson 3 Yd pass from Cam Ward")).toBe(
+      "Wan'Dale Robinson",
+    );
+  });
+
+  it("reads a kicker off a field goal", () => {
+    expect(scoringPlayScorer("Tyler Loop 64 Yd Field Goal")).toBe("Tyler Loop");
+  });
+
+  it("yields no name for a wording it cannot read", () => {
+    // Safer than a partial guess: no name leaves the leg open rather than
+    // grading someone's bet against nobody.
+    expect(scoringPlayScorer("Team safety")).toBeUndefined();
+    expect(scoringPlayScorer(undefined)).toBeUndefined();
+  });
+});
+
+describe("normalizeScoringPlays", () => {
+  const payload = {
+    scoringPlays: [
+      {
+        type: { text: "Rushing Touchdown" },
+        text: "Derrick Henry 5 Yd Rush (Tyler Loop Kick)",
+        period: { number: 1 },
+        clock: { displayValue: "12:09" },
+        team: { id: "33", abbreviation: "BAL" },
+      },
+      {
+        type: { text: "Field Goal Good" },
+        text: "Tyler Loop 64 Yd Field Goal",
+        period: { number: 2 },
+        clock: { displayValue: "0:00" },
+        team: { id: "33", abbreviation: "BAL" },
+      },
+    ],
+  };
+
+  it("keeps the scores in the order they happened", () => {
+    const plays = normalizeScoringPlays(payload, "401872973");
+
+    expect(plays.map((p) => p.sequence)).toEqual([1, 2]);
+    expect(plays[0]).toMatchObject({
+      kind: "touchdown",
+      scorerName: "Derrick Henry",
+      teamAbbreviation: "BAL",
+      teamProviderId: "33",
+      period: 1,
+      clock: "12:09",
+    });
+  });
+
+  it("tells a touchdown from a field goal, which is not a first-touchdown", () => {
+    expect(normalizeScoringPlays(payload, "401872973")[1].kind).toBe("field_goal");
+  });
+
+  it("classifies a wording it has never seen as other rather than guessing", () => {
+    // ESPN adds type names without notice; an unknown one must not be counted
+    // as a touchdown.
+    const odd = { scoringPlays: [{ type: { text: "Defensive 2pt Conversion" }, text: "x" }] };
+    expect(normalizeScoringPlays(odd, "1")[0].kind).toBe("other");
+  });
+
+  it("reads a scoreless game as no plays", () => {
+    expect(normalizeScoringPlays({ scoringPlays: [] }, "401872973")).toEqual([]);
+  });
+
+  it("throws when the payload has no scoringPlays at all", () => {
+    // A shape change or an error body must not read as "nobody scored", which
+    // would settle every first-scorer leg on the slate as a loss.
+    expect(() => normalizeScoringPlays({ code: 400 }, "401872973")).toThrow(/no scoringPlays/);
   });
 });

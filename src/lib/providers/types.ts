@@ -44,6 +44,40 @@ export interface ProviderEvent {
 
 export type SeasonType = "pre" | "regular" | "post";
 
+/**
+ * One score, in the order it happened.
+ *
+ * A stat line is a total and cannot answer a market about *order*: a player
+ * with one touchdown may or may not have had the game's first. So the markets
+ * that turn on sequence — "first touchdown scorer", and every soccer
+ * goalscorer market, since soccer box scores carry no per-player goals at all
+ * — are answered from this feed instead.
+ *
+ * The scorer is identified by name because that is all some providers give:
+ * ESPN's NFL scoring plays carry only prose ("Derrick Henry 5 Yd Rush"), with
+ * no athlete id anywhere in the payload.
+ */
+export interface ProviderScoringPlay {
+  /** Position in the game, 1-based. Order is the whole point of this feed. */
+  sequence: number;
+  kind: ScoringPlayKind;
+  /** Absent when the provider's text could not be read; the leg stays silent. */
+  scorerName?: string;
+  /** Present only where the provider names the athlete, as soccer does. */
+  scorerProviderId?: string;
+  /** The tiebreaker when two players share a surname (§20.2). */
+  teamAbbreviation?: string;
+  teamProviderId?: string;
+  period?: number;
+  clock?: string;
+}
+
+/**
+ * Anything that is not a score a market asks about is "other" rather than
+ * dropped, so the sequence numbers still describe the real game.
+ */
+export type ScoringPlayKind = "touchdown" | "field_goal" | "goal" | "other";
+
 export interface ProviderConfig {
   minRefreshIntervalSeconds: number; // default 60
   dailyRequestLimit?: number;
@@ -67,6 +101,15 @@ export interface SportsProvider {
   getScores?(params: unknown): Promise<ProviderEvent[]>;
   getEvent?(providerEventId: string): Promise<ProviderEvent>;
   getPlayerStats?(providerEventId: string): Promise<ProviderPlayerStat[]>;
+  /**
+   * Scores in the order they happened, for the markets that turn on sequence.
+   * Per Event rather than per slate, so it is only worth calling for an Event
+   * that actually carries such a leg.
+   */
+  getScoringPlays?(params: {
+    sport: string;
+    providerEventId: string;
+  }): Promise<ProviderScoringPlay[]>;
 }
 
 /**
