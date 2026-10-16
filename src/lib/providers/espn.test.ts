@@ -152,6 +152,44 @@ describe("normalizeScoreboard", () => {
     expect(event.awayScore).toBeUndefined();
   });
 
+  it("carries the slate the game belongs to, which is how a prop finds its stats", () => {
+    // Player stats are published per week, so settling a prop on a game from
+    // last week means asking the stats provider for *that* week. The week has to
+    // come off the payload: the NFL week does not turn over at midnight, so
+    // deriving it from the date lands on the wrong slate around Thursday and
+    // Monday games.
+    const week4 = { ...liveGame, week: { number: 4 }, season: { year: 2026, type: 2 } };
+    const [event] = normalizeScoreboard({ events: [week4] }, "nfl");
+
+    expect(event.season).toBe(2026);
+    expect(event.week).toBe(4);
+    expect(event.seasonType).toBe("regular");
+  });
+
+  it("maps the season types a stat line can belong to, and no others", () => {
+    const slate = (type: number) =>
+      normalizeScoreboard(
+        { events: [{ ...liveGame, week: { number: 1 }, season: { year: 2026, type } }] },
+        "nfl",
+      )[0].seasonType;
+
+    expect(slate(1)).toBe("pre");
+    expect(slate(2)).toBe("regular");
+    expect(slate(3)).toBe("post");
+    // ESPN also uses 4 for the Pro Bowl and 5 for the offseason. Neither has a
+    // stat slate, so the caller must fall back rather than ask for one.
+    expect(slate(4)).toBeUndefined();
+    expect(slate(5)).toBeUndefined();
+  });
+
+  it("reports no slate when ESPN omits one", () => {
+    const [event] = normalizeScoreboard({ events: [liveGame] }, "nfl");
+
+    expect(event.season).toBeUndefined();
+    expect(event.week).toBeUndefined();
+    expect(event.seasonType).toBeUndefined();
+  });
+
   it("marks a start time as TBD when ESPN omits the date", () => {
     const noDate = { ...liveGame, date: undefined };
     const [event] = normalizeScoreboard({ events: [noDate] }, "nfl");

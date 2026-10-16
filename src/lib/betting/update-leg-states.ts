@@ -20,6 +20,13 @@
 // player's own numbers, which the scoreline cannot supply. Those come in
 // already matched to participants (applyPlayerStats), and a leg with no mapped
 // participant simply gets none and stays silent.
+//
+// Those numbers are keyed by Event, not handed over as one flat set, because a
+// stats provider publishes them per week. A refresh covering a 14-day
+// settlement backfill spans several weeks at once, so the only way a prop gets
+// the right numbers is to read the ones belonging to its own game's slate —
+// sharing one map across weeks would settle last week's prop off this week's
+// stat line.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { EventStatus, LegSettlement, LiveLegState } from "@/lib/types/domain";
@@ -68,11 +75,11 @@ export async function updateLegStates(
     userId: string;
     eventIds: string[];
     /**
-     * Normalized stat lines by participant id, from applyPlayerStats. Absent
-     * for a sport with no stats provider, which keeps every prop on that sport
-     * silent rather than guessing off the scoreline.
+     * Normalized stat lines by participant id, per Event, from applyPlayerStats.
+     * Absent for a sport with no stats provider, which keeps every prop on that
+     * sport silent rather than guessing off the scoreline.
      */
-    playerStats?: Map<string, Record<string, number>>;
+    playerStatsByEvent?: Map<string, Map<string, Record<string, number>>>;
     now?: () => string;
   },
 ): Promise<UpdateLegStatesResult> {
@@ -129,7 +136,10 @@ export async function updateLegStates(
       {
         marketType: leg.market_type,
         line: leg.line,
-        playerStats: statsForLeg(participantIdsByLeg.get(leg.id), options.playerStats),
+        playerStats: statsForLeg(
+          participantIdsByLeg.get(leg.id),
+          eventId ? options.playerStatsByEvent?.get(eventId) : undefined,
+        ),
       },
       subjectsByLeg.get(leg.id) ?? [],
       event ?? null,
@@ -218,11 +228,13 @@ function resolve(row: EventScoreRow) {
 }
 
 /**
- * The backed player's stat line, or null when there is none to read.
+ * The backed player's stat line for this leg's own game, or null when there is
+ * none to read.
  *
  * Only one participant's numbers can drive one prop, so the first mapped
  * participant wins. A leg naming several players is a market no stat line
- * answers anyway (§26.1), and null keeps it silent.
+ * answers anyway (§26.1), and null keeps it silent. A leg spanning several
+ * Events gets no stats at all, for the same reason it gets no scoreline.
  */
 function statsForLeg(
   participantIds: string[] | undefined,

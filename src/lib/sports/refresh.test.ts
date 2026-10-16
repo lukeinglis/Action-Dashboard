@@ -495,9 +495,97 @@ describe("refreshSportsData", () => {
       expect(result.results[0].statsError).toMatch(/timed out after 10ms/);
     });
 
-    it("asks the provider which week it is rather than assuming", async () => {
-      // The NFL week does not turn over at midnight; guessing would fetch the
-      // wrong slate, which reads as a player who stopped accumulating.
+    it("asks for the week the game itself belongs to, not the week it is now", async () => {
+      // The bug this exists to prevent: a refresh covers a 14-day settlement
+      // backfill, so most games it settles are not on the current slate. Asking
+      // for the current week returns another slate's numbers — or, before the
+      // next kickoff, none at all, which left every past prop silent and every
+      // ticket holding one permanently open.
+      const getWeekPlayerStats = vi.fn<PlayerStatsProvider["getWeekPlayerStats"]>(async () => []);
+      await run(
+        propSetup(),
+        fakeProvider({
+          getScores: async () => [providerEvent({ season: 2026, week: 4, seasonType: "regular" })],
+        }),
+        [nflScope],
+        fakeStatsProvider({
+          getCurrentWeek: async () => ({ season: "2026", week: 6, seasonType: "regular" }),
+          getWeekPlayerStats,
+        }),
+      );
+
+      expect(getWeekPlayerStats).toHaveBeenCalledTimes(1);
+      expect(getWeekPlayerStats).toHaveBeenCalledWith({
+        season: "2026",
+        week: 4,
+        seasonType: "regular",
+      });
+    });
+
+    it("grades each prop off its own game's week when the refresh spans two", async () => {
+      // Multi-week scope is the normal case, not an edge case, so the same
+      // player's two stat lines must not be collapsed into one: the Oct 5 leg is
+      // winning on 72 yards while the Oct 12 leg is losing on 31.
+      const fake = createFakeSupabase({
+        teams,
+        events: [eventRow(), eventRow({ id: "event-2", start_time_utc: "2026-10-12T00:20:00Z" })],
+        provider_mappings: [],
+        sports_refresh_state: [],
+        ...propRows(),
+        bet_legs: [
+          ...propRows().bet_legs,
+          { ...propRows().bet_legs[0], id: "leg-2" },
+        ],
+        bet_leg_events: [
+          ...propRows().bet_leg_events,
+          { id: "link-2", user_id: USER, bet_leg_id: "leg-2", event_id: "event-2", match_method: "auto" },
+        ],
+        bet_leg_subjects: [
+          ...propRows().bet_leg_subjects,
+          { ...propRows().bet_leg_subjects[0], id: "s-2", bet_leg_id: "leg-2" },
+        ],
+      });
+
+      const getWeekPlayerStats = vi.fn<PlayerStatsProvider["getWeekPlayerStats"]>(
+        async ({ week }) => [
+          {
+            providerPlayerId: "4984",
+            playerName: "Devin Egbuka",
+            teamAbbreviation: "DET",
+            stats: { recYards: week === 4 ? 72 : 31 },
+          },
+        ],
+      );
+
+      await run(
+        fake,
+        fakeProvider({
+          getScores: async () => [
+            providerEvent({ season: 2026, week: 4, seasonType: "regular" }),
+            providerEvent({
+              providerEventId: "401872979",
+              startTimeUtc: "2026-10-12T00:20:00Z",
+              season: 2026,
+              week: 5,
+              seasonType: "regular",
+            }),
+          ],
+        }),
+        [nflScope],
+        fakeStatsProvider({ getWeekPlayerStats }),
+      );
+
+      // One request per distinct slate, and never the current-week request.
+      expect(getWeekPlayerStats.mock.calls.map(([p]) => p.week)).toEqual([4, 5]);
+
+      const byId = new Map(fake.tables.bet_legs.map((l) => [l.id as string, l]));
+      expect(byId.get("leg-1")?.live_detail).toBe("72 rec yds of 65.5");
+      expect(byId.get("leg-2")?.live_detail).toBe("31 rec yds of 65.5");
+    });
+
+    it("falls back to the current week when the provider reports no slate", async () => {
+      // Kept for adapters that do not report a week at all: a live slate must
+      // keep behaving as it did before weeks were threaded through.
       const getWeekPlayerStats = vi.fn<PlayerStatsProvider["getWeekPlayerStats"]>(async () => []);
       await run(
         propSetup(),
