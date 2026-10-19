@@ -46,14 +46,28 @@ function parseStarters(block: string, key: string): ParsedFantasyStarter[] {
 function parseOneMatchup(matchupRaw: string): ParsedFantasyMatchup {
   const fields = parseKeyValueLines(matchupRaw);
 
-  const leagueName = fields.get("league");
   const userTeamName = fields.get("my team");
   const opponentTeamName = fields.get("opponent");
-  if (!leagueName || !userTeamName || !opponentTeamName) {
+  if (!userTeamName || !opponentTeamName) {
     throw new FantasyMatchupParseError(
-      `Missing League, "My Team", or Opponent in matchup:\n${matchupRaw}`,
+      `Missing "My Team" or Opponent in matchup:\n${matchupRaw}`,
     );
   }
+
+  // League is optional because a fantasy *matchup* screen generally doesn't
+  // show the league's name — it shows the two team names and the scores. The
+  // extraction prompt's own general rule is to omit any line whose value isn't
+  // visible, so demanding League here failed every real screenshot: the parser
+  // required exactly what the prompt was told to leave out.
+  //
+  // The fallback is the user's own fantasy team name, not "<my team> vs
+  // <opponent>", because FantasyLeague is a season-long container (§35: it
+  // carries `season` and `userTeamName`, and the per-week entity is
+  // FantasyMatchup). The user's team name is stable from week to week, so next
+  // week's screenshot finds this same league; the opponent changes every week,
+  // so a matchup-shaped name would mint a new "league" each time and scatter
+  // one league's weeks across many rows.
+  const leagueName = fields.get("league") || userTeamName;
 
   const { sport: sportName, league } = parseSportField(fields.get("sport"));
 

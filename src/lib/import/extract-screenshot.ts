@@ -66,7 +66,7 @@ Fantasy Matchup
 
 Within each matchup block, in this order:
 Platform: <e.g. Sleeper, ESPN, Yahoo>  (omit if not shown)
-League: <the fantasy league's name>
+League: <the fantasy league's name>    (omit if not shown — a matchup screen often shows only the two team names, and those are what identify the matchup; never guess a league name from the team names)
 Sport: <sport>/<league>                (REQUIRED — see the Sport determination above; use "unknown" only if truly undeterminable. Omit only the "/<league>" part if the league specifically can't be determined.)
 Season: <e.g. 2026>                    (omit if not shown)
 Week: <numeric week>                   (omit if not shown)
