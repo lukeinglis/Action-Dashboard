@@ -52,9 +52,39 @@ describe("parseFantasyMatchupText", () => {
     expect(() => parseFantasyMatchupText("not a matchup at all")).toThrow(FantasyMatchupParseError);
   });
 
-  it("throws when League, Sport, My Team, or Opponent is missing", () => {
-    const bad = `Fantasy Matchup\nSport: football/NFL\nMy Team: A\nOpponent: B\nStarter: Someone`;
-    expect(() => parseFantasyMatchupText(bad)).toThrow(FantasyMatchupParseError);
+  it("throws when My Team or Opponent is missing", () => {
+    const noTeam = `Fantasy Matchup\nLeague: L\nSport: football/NFL\nOpponent: B\nStarter: Someone`;
+    expect(() => parseFantasyMatchupText(noTeam)).toThrow(FantasyMatchupParseError);
+
+    const noOpponent = `Fantasy Matchup\nLeague: L\nSport: football/NFL\nMy Team: A\nStarter: Someone`;
+    expect(() => parseFantasyMatchupText(noOpponent)).toThrow(FantasyMatchupParseError);
+  });
+
+  // A fantasy matchup screen shows the two team names, not the league's name,
+  // and the extraction prompt is told to omit any line it can't see — so
+  // requiring League failed every real screenshot.
+  it("falls back to the user's team name when League is absent", () => {
+    const noLeague = `Fantasy Matchup\nSport: football/NFL\nMy Team: 2 Fast 2 Fantasy\nOpponent: Kettering's Inbox\nStarter: Someone`;
+    const [matchup] = parseFantasyMatchupText(noLeague);
+    expect(matchup.leagueName).toBe("2 Fast 2 Fantasy");
+    expect(matchup.userTeamName).toBe("2 Fast 2 Fantasy");
+    expect(matchup.opponentTeamName).toBe("Kettering's Inbox");
+  });
+
+  // The fallback must not be matchup-shaped: the opponent changes every week,
+  // so next week's screenshot has to land on the same league (§35).
+  it("gives both weeks of a league the same fallback name as the opponent changes", () => {
+    const week = (opponent: string) =>
+      `Fantasy Matchup\nSport: football/NFL\nMy Team: 2 Fast 2 Fantasy\nOpponent: ${opponent}\nStarter: Someone`;
+    const [a] = parseFantasyMatchupText(week("Kettering's Inbox"));
+    const [b] = parseFantasyMatchupText(week("Bieg Ballers"));
+    expect(a.leagueName).toBe(b.leagueName);
+  });
+
+  it("still prefers an explicit League line over the fallback", () => {
+    const [matchup] = parseFantasyMatchupText(MATCHUP);
+    expect(matchup.leagueName).toBe("2 Fast 2 Fantasy");
+    expect(matchup.userTeamName).toBe("My Team");
   });
 
   it("throws when there are no starters at all", () => {
