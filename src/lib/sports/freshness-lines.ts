@@ -16,12 +16,20 @@
 
 import type { SportsRefreshState } from "@/lib/types/domain";
 import type { SportRefreshResult } from "./refresh";
-import { sportLabel } from "./sport-keys";
+import { providerSportLabel } from "./sport-keys";
 
 export type FreshnessTone = "ok" | "warning" | "error" | "muted";
 
 export interface FreshnessLine {
-  /** Internal `events.sport`, for a stable React key. */
+  /**
+   * The provider sport key, for a stable React key.
+   *
+   * Provider rather than internal, because that is what a refresh — and so a
+   * line — is per. One internal sport can span several provider keys, and NFL
+   * and college football are two separate requests with their own cooldowns;
+   * keyed internally they would collapse into a single "Football" line whose
+   * timestamp belonged to whichever ran last.
+   */
   sport: string;
   /** How the sport is named to the user, e.g. "NFL". */
   label: string;
@@ -35,8 +43,10 @@ export function freshnessLines(
   timeZone: string,
   results: SportRefreshResult[] = [],
 ): FreshnessLine[] {
+  // `SportsRefreshState.sport` holds the provider key (see refreshOneSport), so
+  // both sides are keyed by `providerSport` to line up.
   const stateBySport = new Map(states.map((s) => [s.sport, s]));
-  const resultBySport = new Map(results.map((r) => [r.sport, r]));
+  const resultBySport = new Map(results.map((r) => [r.providerSport, r]));
 
   // A sport appears if it has ever refreshed or was just attempted. Nothing is
   // invented for a sport the user has no exposure to.
@@ -45,7 +55,7 @@ export function freshnessLines(
   return sports
     .map((sport) => ({
       sport,
-      label: sportLabel(sport),
+      label: providerSportLabel(sport),
       ...detailFor(resultBySport.get(sport), stateBySport.get(sport), timeZone),
     }))
     .sort((a, b) => a.label.localeCompare(b.label));

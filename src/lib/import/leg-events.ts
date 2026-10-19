@@ -7,7 +7,8 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ensureEvent } from "@/lib/events/ensure";
-import { toProviderSport } from "@/lib/sports/sport-keys";
+import { ensureMatchupTeams } from "@/lib/teams/ensure";
+import { providerSportLabel, toProviderSport } from "@/lib/sports/sport-keys";
 import type { ProviderEvent } from "@/lib/providers/types";
 import { findTeam, type TeamCandidate } from "./match-parsed-legs";
 import type { ApprovedLeg } from "./pipeline";
@@ -20,12 +21,13 @@ export interface LegEventDeps {
 }
 
 /**
- * The id of the Event this leg's matchup belongs to, creating it if needed, or
- * undefined when the matchup can't be resolved to one.
+ * The id of the Event this leg's matchup belongs to, creating it — and the
+ * Teams it needs — if necessary, or undefined when the matchup can't be
+ * resolved to one.
  *
- * Returns undefined rather than guessing when either team is unknown: §20.2
- * reports an ambiguous match instead of picking one, and a leg pointed at the
- * wrong game grades to a confidently wrong result.
+ * Returns undefined rather than guessing when the matchup stays ambiguous:
+ * §20.2 reports an ambiguous match instead of picking one, and a leg pointed at
+ * the wrong game grades to a confidently wrong result.
  */
 export async function resolveLegEventId(
   supabase: SupabaseClient,
@@ -35,16 +37,45 @@ export async function resolveLegEventId(
 ): Promise<string | undefined> {
   if (!leg.matchup) return undefined;
 
-  const awayTeam = findTeam(leg.matchup.awayTeamName, leg.sport, deps.teams);
-  const homeTeam = findTeam(leg.matchup.homeTeamName, leg.sport, deps.teams);
-  if (!awayTeam || !homeTeam) return undefined;
+  const matchedAway = findTeam(leg.matchup.awayTeamName, leg.sport, deps.teams);
+  const matchedHome = findTeam(leg.matchup.homeTeamName, leg.sport, deps.teams);
 
-  // Extraction can't always determine Sport; the matched teams' own sport is
+  // Extraction can't always determine Sport; a matched team's own sport is
   // authoritative and is what the Event must be stored under so refresh scope
-  // and the Schedule Rail find it.
-  const sport = leg.sport || awayTeam.sport || homeTeam.sport;
+  // and the Schedule Rail find it. With neither a parsed sport nor a matched
+  // team there is nothing to look the game up under.
+  const sport = leg.sport || matchedAway?.sport || matchedHome?.sport;
+  if (!sport) return undefined;
+
   const providerSport = toProviderSport(sport, leg.league);
   const schedule = providerSport ? await deps.loadSchedule(providerSport) : [];
+
+  // A team the user doesn't have yet is the common case for any sport outside
+  // the NFL seed data — every college football and soccer leg imported so far
+  // died here. `ensureMatchupTeams` creates the missing side from the scheduled
+  // game itself, so the name is the provider's rather than the screenshot's.
+  let awayTeam = matchedAway;
+  let homeTeam = matchedHome;
+  if (!awayTeam || !homeTeam) {
+    if (!providerSport) return undefined;
+    const ensured = await ensureMatchupTeams(
+      supabase,
+      userId,
+      {
+        sport,
+        // The canonical league for the provider key, not `leg.league`: a slip
+        // writes "CFB" or "England - Premier League", and a Team stored under
+        // that spelling is one `sport-keys` can't translate back.
+        league: providerSportLabel(providerSport),
+        awayTeamName: leg.matchup.awayTeamName,
+        homeTeamName: leg.matchup.homeTeamName,
+      },
+      { teams: deps.teams, schedule },
+    );
+    if (!ensured) return undefined;
+    awayTeam = ensured.awayTeam;
+    homeTeam = ensured.homeTeam;
+  }
 
   return ensureEvent(
     supabase,

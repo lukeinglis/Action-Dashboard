@@ -76,24 +76,24 @@ export function findTeam(name: string, sport: string, teams: TeamCandidate[]): T
   const norm = normalizeEventName(name);
   const sportOk = (t: TeamCandidate) => !sport || t.sport === sport;
 
-  const exact = teams.find(
+  const exact = teams.filter(
     (t) =>
       sportOk(t) &&
       (normalizeEventName(t.name) === norm || (t.abbreviation && normalizeEventName(t.abbreviation) === norm)),
   );
-  if (exact) return exact;
+  if (exact.length) return soleSport(exact);
 
   // Sportsbook apps commonly display a team as "<abbreviation> <mascot>"
   // (e.g. "JAX Jaguars") rather than the full name ("Jacksonville Jaguars")
   // or the bare abbreviation ("JAX") — neither of which the exact check
   // above matches. Recognize that hybrid form against each candidate.
-  const hybrid = teams.find((t) => {
+  const hybrid = teams.filter((t) => {
     if (!sportOk(t) || !t.abbreviation) return false;
     const mascot = t.name.trim().split(/\s+/).pop();
     if (!mascot) return false;
     return norm === normalizeEventName(`${t.abbreviation} ${mascot}`);
   });
-  if (hybrid) return hybrid;
+  if (hybrid.length) return soleSport(hybrid);
 
   // The same hybrid, but shortened by the *city's* initials rather than the
   // team's abbreviation: a slip says "LA Rams" and "NY Giants" where the
@@ -106,14 +106,40 @@ export function findTeam(name: string, sport: string, teams: TeamCandidate[]): T
   //
   // The mascot has to match too, which is what makes this unambiguous — two
   // teams can share a city, never a city and a mascot.
-  return teams.find((t) => {
+  const initials = teams.filter((t) => {
     if (!sportOk(t)) return false;
     const words = t.name.trim().split(/\s+/);
     if (words.length < 2) return false;
     const mascot = words[words.length - 1];
-    const initials = words.slice(0, -1).map((w) => w[0]).join("");
-    return norm === normalizeEventName(`${initials} ${mascot}`);
+    const prefix = words.slice(0, -1).map((w) => w[0]).join("");
+    return norm === normalizeEventName(`${prefix} ${mascot}`);
   });
+  return initials.length ? soleSport(initials) : undefined;
+}
+
+/**
+ * The first match, unless they span more than one sport — in which case there
+ * is no answer, only a guess.
+ *
+ * This only ever bites on the unknown-sport path above, because a known sport
+ * has already filtered the candidates down to one. It matters because a college
+ * program fields more than one team under the very same name: ESPN lists 264
+ * schools whose college-football and college-basketball `displayName` are
+ * byte-identical (and 266 sharing an abbreviation), so "Auburn Tigers" is two
+ * Team rows the moment both sports are tracked.
+ *
+ * Picking the first would be picking by row order. §20.2 reports an ambiguous
+ * match rather than choosing, and here the cost of choosing is concrete: the
+ * sport decided here is the sport the Event is filed under and the schedule the
+ * leg is graded against, so a football bet resolved to basketball Auburn grades
+ * off the wrong game entirely.
+ *
+ * Matches *within* one sport still take the first, which is the pre-existing
+ * behaviour: a duplicate row is the same team either way.
+ */
+function soleSport(matches: TeamCandidate[]): TeamCandidate | undefined {
+  const sports = new Set(matches.map((t) => t.sport));
+  return sports.size === 1 ? matches[0] : undefined;
 }
 
 function findParticipant(

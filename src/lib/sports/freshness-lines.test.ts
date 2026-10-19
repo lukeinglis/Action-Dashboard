@@ -10,7 +10,9 @@ function state(overrides: Partial<SportsRefreshState> = {}): SportsRefreshState 
     id: "state-1",
     userId: "user-1",
     providerKey: "espn",
-    sport: "football",
+    // The provider key, not the internal sport: `sports_refresh_state` is
+    // keyed per provider request (see refreshOneSport).
+    sport: "nfl",
     requestsTodayCount: 0,
     requestsTodayDate: "2026-10-05",
     createdAt: "2026-10-05T18:00:00.000Z",
@@ -44,7 +46,7 @@ describe("freshnessLines", () => {
     // §21's example line, verbatim: "NFL updated 4:18 PM".
     const lines = freshnessLines([state({ lastSuccessAt: "2026-10-05T20:18:00.000Z" })], TZ);
 
-    expect(lines).toEqual([{ sport: "football", label: "NFL", detail: "updated 4:18 PM", tone: "ok" }]);
+    expect(lines).toEqual([{ sport: "nfl", label: "NFL", detail: "updated 4:18 PM", tone: "ok" }]);
   });
 
   it("keeps the last successful update visible beside a failure", () => {
@@ -66,7 +68,7 @@ describe("freshnessLines", () => {
     // The reason §21 tracks freshness per sport at all.
     const lines = freshnessLines(
       [
-        state({ sport: "football", lastSuccessAt: "2026-10-05T20:18:00.000Z" }),
+        state({ sport: "nfl", lastSuccessAt: "2026-10-05T20:18:00.000Z" }),
         state({ id: "s-2", sport: "golf", lastSuccessAt: "2026-10-05T18:10:00.000Z" }),
       ],
       TZ,
@@ -79,6 +81,30 @@ describe("freshnessLines", () => {
     expect(lines.map((l) => `${l.label} ${l.detail}`)).toEqual([
       "NFL updated 4:18 PM",
       "PGA failed - last successful update 2:10 PM",
+    ]);
+  });
+
+  it("keeps two leagues of one sport on separate lines", () => {
+    // NFL and college football are one internal sport ("football") but two
+    // separate ESPN requests with their own cooldowns and their own outcomes.
+    // Keyed by the internal sport they collapsed into a single "Football" line
+    // whose timestamp belonged to whichever ran last — so a stale NCAAF would
+    // hide behind a fresh NFL, which is exactly what §21 exists to prevent.
+    const lines = freshnessLines(
+      [
+        state({ sport: "nfl", lastSuccessAt: "2026-10-05T20:18:00.000Z" }),
+        state({ id: "s-2", sport: "college-football", lastSuccessAt: "2026-10-05T18:10:00.000Z" }),
+      ],
+      TZ,
+      [
+        result({ sport: "football", providerSport: "nfl", refreshedAt: "2026-10-05T20:18:00.000Z" }),
+        result({ sport: "football", providerSport: "college-football", status: "failed", error: "boom" }),
+      ],
+    );
+
+    expect(lines.map((l) => `${l.label} ${l.detail}`)).toEqual([
+      "NCAAF failed - last successful update 2:10 PM",
+      "NFL updated 4:18 PM",
     ]);
   });
 

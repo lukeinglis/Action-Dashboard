@@ -25,16 +25,29 @@ export const ESPN_PROVIDER_KEY = "espn";
 
 const BASE_URL = "https://site.api.espn.com/apis/site/v2/sports";
 
-/** Sport key -> ESPN path segment. Phase 0 covers NFL and PGA only (§47). */
+/**
+ * Sport key -> ESPN path segment.
+ *
+ * College football and the Premier League are here because `supportsSport`
+ * reads straight off this table: an absent key made refresh skip the sport
+ * outright, so every NCAAF and EPL leg was structurally ungradeable rather than
+ * merely unmatched. Both endpoints sit on the same free, unauthenticated host as
+ * the NFL one, so neither costs anything beyond the per-sport requests §22.1
+ * already counts.
+ */
 const SPORT_PATHS: Record<string, string> = {
   nfl: "football/nfl",
+  "college-football": "football/college-football",
   golf: "golf/pga",
+  "eng.1": "soccer/eng.1",
 };
 
 /** ESPN league label, for the non-team match key (§20.2). */
 const SPORT_LEAGUES: Record<string, string> = {
   nfl: "NFL",
+  "college-football": "NCAAF",
   golf: "PGA",
+  "eng.1": "Premier League",
 };
 
 /**
