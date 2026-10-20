@@ -23,6 +23,9 @@ export interface LegEventDeps {
    * day a kickoff belongs to is the provider's convention, not ours — ESPN files
    * a Saturday-night game under the Saturday even though it is Sunday in UTC.
    * `cachedScheduleLoader` takes that conversion as a dependency.
+   *
+   * The schedule may span several slates — see `withSlateProbe`. Nothing here
+   * assumes one day's games, only that every candidate game is in the list.
    */
   loadSchedule: (providerSport: string, slateAtUtc?: string) => Promise<ProviderEvent[]>;
   providerKey: string;
@@ -132,5 +135,74 @@ export function cachedScheduleLoader(
       cache.set(key, pending);
     }
     return pending;
+  };
+}
+
+/**
+ * Candidate slate instants for a leg whose slip printed no kickoff: the anchor
+ * itself, then each of the `daysBack` days before it.
+ *
+ * Such a leg carries no date at all — its `Event:` line names two teams and
+ * nothing else — so once its game is a day old the current scoreboard no longer
+ * carries it and there is nothing to match against. That is not an edge case: a
+ * slip is usually screenshotted after the fact, which is how every orphaned leg
+ * in the author's own data got that way.
+ *
+ * When the ticket was *placed* is the only date signal left, and it is a good
+ * one. Measured against those orphans the game sat 0 days back (a slip captured
+ * an hour before kickoff) and 1 day back (a Sunday-morning import of Saturday's
+ * college slate), so a few days of margin covers the realistic spread without
+ * widening into guesswork. Widening is not unsafe so much as wasteful, because
+ * the caller still links only when exactly one game in the whole searched
+ * window fits the printed names — a wider window reports ambiguity, it does not
+ * invent a match.
+ *
+ * Instants rather than formatted dates, so the provider's own calendar decides
+ * which day each one belongs to, and so two anchors landing on one slate
+ * collapse into a single request inside `cachedScheduleLoader`.
+ */
+export function slateProbeInstants(anchorUtc: string, daysBack: number): string[] {
+  const anchor = new Date(anchorUtc);
+  if (Number.isNaN(anchor.getTime())) return [];
+
+  const out: string[] = [];
+  for (let day = 0; day <= Math.max(0, daysBack); day += 1) {
+    out.push(new Date(anchor.getTime() - day * 86_400_000).toISOString());
+  }
+  return out;
+}
+
+/**
+ * Widens a schedule loader to search several past slates at once, for legs
+ * whose slip printed no kickoff to scope the request with.
+ *
+ * A printed kickoff still wins: it names the slate outright, so there is
+ * nothing to search and guessing wider could only add candidates.
+ *
+ * The result is deduplicated by provider event id. Two probed slates returning
+ * the same game would otherwise read as two candidate games and be refused as
+ * ambiguous — the opposite of the intent, and silently. ESPN files a given game
+ * under exactly one slate date today, so this is insurance rather than an
+ * observed need, but the failure it prevents leaves no trace.
+ */
+export function withSlateProbe(
+  load: (providerSport: string, slateAtUtc?: string) => Promise<ProviderEvent[]>,
+  probeInstants: string[],
+): (providerSport: string, slateAtUtc?: string) => Promise<ProviderEvent[]> {
+  if (probeInstants.length === 0) return load;
+
+  return async (providerSport, slateAtUtc) => {
+    if (slateAtUtc) return load(providerSport, slateAtUtc);
+
+    const slates = await Promise.all(probeInstants.map((instant) => load(providerSport, instant)));
+
+    const seen = new Set<string>();
+    const games: ProviderEvent[] = [];
+    for (const game of slates.flat()) {
+      if (seen.has(game.providerEventId)) continue;
+      seen.add(game.providerEventId);
+      games.push(game);
+    }
+    return games;
   };
 }
