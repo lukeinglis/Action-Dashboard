@@ -15,6 +15,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeEventName } from "@/lib/events/match-key";
+import { soleSport } from "@/lib/import/match-parsed-legs";
 import { toParticipant, type ParticipantRow } from "@/lib/db/rows";
 import type { Participant } from "@/lib/types/domain";
 
@@ -57,6 +58,21 @@ export async function ensureParticipant(
       // the honest answer for an unknown sport, but it reads as a data problem
       // in the participants list rather than as a footballer.
       type: "player",
+      // An unknown sport is stored rather than rejected, which is the opposite
+      // of `ensureTeam` — the asymmetry is in the consequences, not the schema
+      // (both columns are NOT NULL, so "" is the sentinel either way).
+      //
+      // Rejecting would throw, and the only two callers are mid-approval with
+      // the Ticket and BetLeg already written (see the import action, which
+      // swallows the analogous Event-resolution failure for exactly that
+      // reason). `ensureTeam` can afford to throw because it is only ever
+      // reached from a provider game that matched unambiguously, which always
+      // carries a sport; extraction genuinely does fail to name one here.
+      //
+      // And the row it creates is inert rather than dangerous: player-stat
+      // matching loads candidates with `.eq("sport", sport)` from the leg's own
+      // sport, so a sportless Participant is never a candidate and the prop is
+      // simply not graded. §26.1 prefers that to a confidently wrong grade.
       sport: input.sport || "",
       league: input.league ?? null,
       name,
@@ -86,12 +102,23 @@ async function findByName(
 
   const norm = normalizeEventName(name);
   const rows = (data ?? []) as ParticipantRow[];
+  const named = rows.filter((r) => normalizeEventName(r.name) === norm);
+
   // An unknown sport matches on name alone, mirroring matchParsedLeg: refusing
   // to reuse a known player just because extraction dropped "football" would
-  // create a duplicate of them.
+  // create a duplicate of them. `soleSport` is that same matcher's guard, and
+  // it is why name-alone is safe to do: when the name belongs to players in two
+  // different sports there is no answer, only row order, and §20.2 reports an
+  // ambiguous match rather than picking one. Identically-named athletes are
+  // routine in college sports, and the cost of guessing is a prop graded
+  // against a stranger's stat line (§26.1).
+  //
+  // The sportless rung is deliberately left unguarded: every row it can match
+  // already has no sport, so they cannot span two of them and the guard would
+  // be a no-op.
   const match =
-    rows.find((r) => (!sport || r.sport === sport) && normalizeEventName(r.name) === norm) ??
-    (sport ? rows.find((r) => !r.sport && normalizeEventName(r.name) === norm) : undefined);
+    soleSport(named.filter((r) => !sport || r.sport === sport)) ??
+    (sport ? named.find((r) => !r.sport) : undefined);
 
   return match ? toParticipant(match) : null;
 }
