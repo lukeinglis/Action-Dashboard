@@ -9,6 +9,12 @@
 //   2. A slate that parses but contains no events is an error, not "no games".
 //      Several open-source projects silently stored zero events through that
 //      regression because they trusted an empty result.
+//
+//      One opt-out, `allowEmptySlate`: a caller naming a *past* date is asking
+//      about a day that may genuinely have had no games, so for it an empty
+//      slate is an answer rather than a fault. The guard stays on by default,
+//      and stays on unconditionally for a payload that lists events none of
+//      which are usable — that is a shape change, not an empty day.
 
 import {
   DEFAULT_PROVIDER_CONFIG,
@@ -166,11 +172,37 @@ function parseScore(raw: string | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+export interface NormalizeScoreboardOptions {
+  /**
+   * Accept a slate ESPN itself reported as empty, instead of treating it as a
+   * failure.
+   *
+   * Off by default, because for the *current* slate an empty result is the
+   * Sept-2026 regression this module exists to guard against (see the header),
+   * and several projects silently stored zero events through it.
+   *
+   * On for a dated historical probe, where no games is the ordinary answer and
+   * not a fault: `college-football?dates=20261018` (the Sunday after a Saturday
+   * slate) and `eng.1?dates=20261009` both return `events: []` today. Without
+   * this, walking a date window to find a past game throws on most of the dates
+   * it tries, and the one real answer is lost among the noise.
+   *
+   * Note this only ever relaxes the *empty* case. A payload carrying events of
+   * which none are usable is a shape change whatever the caller asked for, so it
+   * still throws — that is the failure mode worth never papering over.
+   */
+  allowEmptySlate?: boolean;
+}
+
 /**
  * Scoreboard payload -> ProviderEvent[]. Pure, so it can be tested against a
  * captured payload with no network.
  */
-export function normalizeScoreboard(payload: unknown, sport: string): ProviderEvent[] {
+export function normalizeScoreboard(
+  payload: unknown,
+  sport: string,
+  options: NormalizeScoreboardOptions = {},
+): ProviderEvent[] {
   const board = payload as EspnScoreboard | null;
   const events = board?.events;
   if (!Array.isArray(events)) {
@@ -228,7 +260,16 @@ export function normalizeScoreboard(payload: unknown, sport: string): ProviderEv
     });
   }
 
-  if (out.length === 0) {
+  // ESPN listed games but none survived normalization — every one lacked an id.
+  // That is a payload shape change, not an empty slate, so it is an error even
+  // for a caller that tolerates empty ones.
+  if (out.length === 0 && events.length > 0) {
+    throw new Error(
+      `ESPN ${sport}: payload listed ${events.length} event(s) but none were usable`,
+    );
+  }
+
+  if (out.length === 0 && !options.allowEmptySlate) {
     throw new Error(
       `ESPN ${sport}: slate parsed but contained no usable events — treating as failure, not "no games"`,
     );
@@ -379,10 +420,45 @@ async function fetchJson(url: string, timeoutMs: number): Promise<unknown> {
   return response.json();
 }
 
+/**
+ * The calendar ESPN buckets a scoreboard day by — measured, not assumed.
+ *
+ * `college-football?dates=20261017` returns 52 games, 9 of which carry UTC dates
+ * on the 18th (a 02:15Z kickoff is Saturday 10:15pm ET); grouped by Eastern date
+ * all 52 fall on the 17th. `nfl?dates=20261004` behaves the same way for the
+ * Sunday-night game.
+ */
+const ESPN_SLATE_TIME_ZONE = "America/New_York";
+
+/**
+ * The `dates=` value for the slate containing `instantUtc`, or undefined if that
+ * instant can't be read.
+ *
+ * Converting through Eastern rather than slicing the ISO string matters: a
+ * Saturday 10:15pm ET kickoff is `2026-10-18T02:15Z`, so a UTC slice asks for
+ * `dates=20261018` — which returns zero events, because ESPN filed that game
+ * under the 17th. Every late kickoff would be invisible: 9 of 52 on that college
+ * slate, and the NFL's Sunday- and Monday-night games every week.
+ */
+export function espnSlateDate(instantUtc: string): string | undefined {
+  const instant = new Date(instantUtc);
+  if (Number.isNaN(instant.getTime())) return undefined;
+  // en-CA formats as YYYY-MM-DD, so this needs no manual padding.
+  return instant
+    .toLocaleDateString("en-CA", { timeZone: ESPN_SLATE_TIME_ZONE })
+    .replace(/-/g, "");
+}
+
 export interface EspnScheduleParams {
   sport: string;
   /** YYYYMMDD. Omit for the current slate. Ranges are not supported upstream. */
   date?: string;
+  /**
+   * Treat a slate ESPN reports as empty as "no games" rather than a failure.
+   * See `NormalizeScoreboardOptions.allowEmptySlate` — only meaningful with a
+   * `date`, since an empty *current* slate is the regression we guard against.
+   */
+  allowEmptySlate?: boolean;
 }
 
 export const EspnProvider: SportsProvider = {
@@ -394,7 +470,7 @@ export const EspnProvider: SportsProvider = {
   },
 
   async getSchedule(params: unknown): Promise<ProviderEvent[]> {
-    const { sport, date } = params as EspnScheduleParams;
+    const { sport, date, allowEmptySlate } = params as EspnScheduleParams;
     const path = SPORT_PATHS[sport];
     if (!path) throw new Error(`ESPN: unsupported sport "${sport}"`);
 
@@ -403,7 +479,7 @@ export const EspnProvider: SportsProvider = {
       `${BASE_URL}/${path}/scoreboard${query}`,
       EspnProvider.config.timeoutMs,
     );
-    return normalizeScoreboard(payload, sport);
+    return normalizeScoreboard(payload, sport, { allowEmptySlate });
   },
 
   async getScores(params: unknown): Promise<ProviderEvent[]> {

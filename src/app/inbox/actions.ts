@@ -31,7 +31,7 @@ import {
 } from "@/lib/import/pipeline";
 import { fetchDuplicateCandidates, fetchMatchCandidates, fetchPlayerSlotCandidates } from "@/lib/import/candidates";
 import { cachedScheduleLoader, resolveLegEventId, type LegEventDeps } from "@/lib/import/leg-events";
-import { EspnProvider } from "@/lib/providers/espn";
+import { EspnProvider, espnSlateDate } from "@/lib/providers/espn";
 import { createDfsLineup } from "@/lib/dfs/lineups";
 import { createDfsLineupSlot } from "@/lib/dfs/lineup-slots";
 import { createDfsEntry } from "@/lib/dfs/entries";
@@ -240,7 +240,14 @@ export async function approveParsedImport(
   const legEventDeps: LegEventDeps | null = needsEvents
     ? {
         teams: (await fetchMatchCandidates(supabase, userId)).teams,
-        loadSchedule: cachedScheduleLoader((sport) => EspnProvider.getSchedule({ sport })),
+        loadSchedule: cachedScheduleLoader(
+          (sport, date) =>
+            // `allowEmptySlate` only for a dated request: a past date may
+            // genuinely have had no games, whereas an empty *current* slate is
+            // the provider regression the adapter guards against.
+            EspnProvider.getSchedule({ sport, date, allowEmptySlate: date !== undefined }),
+          espnSlateDate,
+        ),
         providerKey: EspnProvider.key,
       }
     : null;
