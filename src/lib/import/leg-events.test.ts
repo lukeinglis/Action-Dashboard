@@ -82,8 +82,10 @@ describe("resolveLegEventId", () => {
   it("creates the teams a college football slip named, which no seed carries", async () => {
     // The seed data is the 32 NFL teams, and the only other way to get a Team
     // was the manual prompt on /events/new — so every college football and
-    // soccer leg imported so far resolved no teams, linked to no Event, and
-    // lost its matchup for good (BetLeg does not persist the team names).
+    // soccer leg imported so far resolved no teams and linked to no Event.
+    // `repairLegs` cannot rescue those after the fact: it re-reads the matchup
+    // from `raw_description`, but §20.2 bars it from creating the game, so the
+    // Event has to come from approval — here.
     const fake = createFakeSupabase({ events: [] });
     const ncaaf: ProviderEvent = {
       providerEventId: "espn-402",

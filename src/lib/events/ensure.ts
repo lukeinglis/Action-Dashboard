@@ -4,10 +4,15 @@
 // Why this exists: the only way to create an Event was the manual form at
 // /events/new. Import matched legs against Events the user already had and
 // left the rest unlinked — so importing a slip for a game not already entered
-// by hand produced a Ticket whose legs point at no game at all. Nothing
-// downstream can recover from that: grading needs the scoreline, refresh
-// scope is built from Events, and BetLeg does not persist the team names, so
-// by the time the ticket is saved the matchup is gone for good.
+// by hand produced a Ticket whose legs point at no game at all. Grading needs
+// the scoreline and refresh scope is built from Events, so such a leg can never
+// settle.
+//
+// The slip's own text does survive, in `bet_legs.raw_description`, and
+// `repairLegs` re-derives links from it after the fact. That is not a substitute
+// for creating the Event here: §20.2 allows creation only from an explicit user
+// action and has refresh "never create new ones", so `repairLegs` can rediscover
+// only games the user already has. A missing game has to come from approval.
 //
 // An Event is only created with a real start time. `buildEventMatchKey`
 // returns null without one, which would leave the row permanently unmatchable
