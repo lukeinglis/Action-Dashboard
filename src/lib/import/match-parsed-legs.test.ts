@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findTeam, matchParsedLeg, type MatchCandidates } from "./match-parsed-legs";
+import { findTeam, matchParsedLeg, type MatchCandidates, type ParticipantCandidate } from "./match-parsed-legs";
 import type { ParsedLeg } from "./parse-slip-text";
 
 const TZ = "America/New_York";
@@ -335,6 +335,52 @@ describe("findTeam", () => {
       expect(
         findTeam("Auburn Tigers", "", [footballAuburn, basketballAuburn, hybridTrap]),
       ).toBeUndefined();
+    });
+
+    // The same hazard for players, and a sharper one: a school's football and
+    // basketball rosters are different people, and identically-named athletes
+    // are far more common in college than in the pros.
+    const footballSmith = { id: "part-smith-fb", sport: "football", name: "Will Smith" };
+    const basketballSmith = { id: "part-smith-bb", sport: "basketball", name: "Will Smith" };
+
+    function propSubjects(sport: string, participants: ParticipantCandidate[]) {
+      return matchParsedLeg(
+        leg({
+          marketType: "receiving_yards",
+          selection: "Will Smith Over 49.5",
+          subject: "Will Smith",
+          overUnder: "over",
+          sport,
+        }),
+        { teams: [], participants, events: [] },
+        TZ,
+      ).subjects;
+    }
+
+    it("still matches a player by name alone while the name belongs to one sport", () => {
+      expect(propSubjects("", [footballSmith])[0]).toMatchObject({
+        participantId: "part-smith-fb",
+        matched: true,
+      });
+    });
+
+    it("refuses to pick between two sports' players of the same name", () => {
+      // A prop pinned to the wrong Participant is looked up against a
+      // stranger's stat line, which §26.1 ranks below not grading at all. The
+      // subject falls back to "create a player", and that new row is sportless
+      // — player-stat matching filters candidates by the leg's own sport, so it
+      // stays out of grading rather than answering with the wrong person.
+      expect(propSubjects("", [footballSmith, basketballSmith])[0]).toMatchObject({
+        participantId: undefined,
+        matched: false,
+        createParticipant: true,
+      });
+    });
+
+    it("is decisive about the player again as soon as the leg names its sport", () => {
+      const both = [footballSmith, basketballSmith];
+      expect(propSubjects("football", both)[0].participantId).toBe("part-smith-fb");
+      expect(propSubjects("basketball", both)[0].participantId).toBe("part-smith-bb");
     });
   });
 });

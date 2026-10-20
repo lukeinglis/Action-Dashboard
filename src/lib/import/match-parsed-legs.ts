@@ -121,8 +121,8 @@ export function findTeam(name: string, sport: string, teams: TeamCandidate[]): T
  * The first match, unless they span more than one sport — in which case there
  * is no answer, only a guess.
  *
- * This only ever bites on the unknown-sport path above, because a known sport
- * has already filtered the candidates down to one. It matters because a college
+ * This only ever bites on the unknown-sport path, because a known sport has
+ * already filtered the candidates down to one. It matters because a college
  * program fields more than one team under the very same name: ESPN lists 264
  * schools whose college-football and college-basketball `displayName` are
  * byte-identical (and 266 sharing an abbreviation), so "Auburn Tigers" is two
@@ -136,9 +136,14 @@ export function findTeam(name: string, sport: string, teams: TeamCandidate[]): T
  *
  * Matches *within* one sport still take the first, which is the pre-existing
  * behaviour: a duplicate row is the same team either way.
+ *
+ * Generic over Teams and Participants because the hazard is the same for both,
+ * and worse for players: identically-named athletes are common across college
+ * sports, and a prop pinned to the wrong Participant is looked up against a
+ * stranger's stat line.
  */
-function soleSport(matches: TeamCandidate[]): TeamCandidate | undefined {
-  const sports = new Set(matches.map((t) => t.sport));
+export function soleSport<T extends { sport: string }>(matches: T[]): T | undefined {
+  const sports = new Set(matches.map((m) => m.sport));
   return sports.size === 1 ? matches[0] : undefined;
 }
 
@@ -148,7 +153,9 @@ function findParticipant(
   participants: ParticipantCandidate[],
 ): ParticipantCandidate | undefined {
   const norm = normalizeEventName(name);
-  return participants.find((p) => (!sport || p.sport === sport) && normalizeEventName(p.name) === norm);
+  return soleSport(
+    participants.filter((p) => (!sport || p.sport === sport) && normalizeEventName(p.name) === norm),
+  );
 }
 
 function sameName(a: string | undefined, b: string | undefined): boolean {

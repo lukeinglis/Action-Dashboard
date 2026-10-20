@@ -101,4 +101,44 @@ describe("ensureParticipant", () => {
     await expect(run(fake, { name: "   " })).rejects.toThrow(/name is required/);
     expect(fake.tables.participants).toHaveLength(0);
   });
+
+  describe("when extraction could not determine the sport", () => {
+    it("refuses to reuse either player when two sports share the name", async () => {
+      // Reusing the first would be choosing by row order, and the Participant
+      // chosen here is the one the prop is graded against — so the wrong one
+      // reads a stranger's stat line. §20.2 reports ambiguity instead of
+      // picking, and the duplicate this creates is sportless, which keeps it
+      // out of player-stat matching entirely rather than grading it wrong.
+      const fake = seed([
+        { id: "p-fb", user_id: USER, type: "player", sport: "football", name: "Will Smith" },
+        { id: "p-bb", user_id: USER, type: "player", sport: "basketball", name: "Will Smith" },
+      ]);
+      const participant = await run(fake, { name: "Will Smith", sport: "" });
+
+      expect(participant.id).not.toBe("p-fb");
+      expect(participant.id).not.toBe("p-bb");
+      expect(fake.tables.participants).toHaveLength(3);
+    });
+
+    it("is not made ambiguous by another user's same-named player", async () => {
+      const fake = seed([
+        { id: "p-fb", user_id: USER, type: "player", sport: "football", name: "Will Smith" },
+        { id: "p-bb", user_id: "user-2", type: "player", sport: "basketball", name: "Will Smith" },
+      ]);
+      expect((await run(fake, { name: "Will Smith", sport: "" })).id).toBe("p-fb");
+      expect(fake.tables.participants).toHaveLength(2);
+    });
+
+    it("still reuses a sportless player when the leg does name its sport", async () => {
+      // Every row that rung can match is itself sportless, so it can never
+      // span two sports and the ambiguity guard must not apply to it — a
+      // second sportless duplicate should not start blocking the reuse.
+      const fake = seed([
+        { id: "p1", user_id: USER, type: "player", sport: "", name: "CeeDee Lamb" },
+        { id: "p2", user_id: USER, type: "player", sport: "", name: "CeeDee Lamb" },
+      ]);
+      expect((await run(fake, { name: "CeeDee Lamb", sport: "football" })).id).toBe("p1");
+      expect(fake.tables.participants).toHaveLength(2);
+    });
+  });
 });
