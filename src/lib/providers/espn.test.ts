@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  espnSlateDate,
   formatPeriod,
   mapEspnStatus,
   normalizeBoxScore,
@@ -244,6 +245,70 @@ describe("normalizeScoreboard", () => {
 
   it("treats an empty slate as a failure rather than no games", () => {
     expect(() => normalizeScoreboard({ events: [] }, "nfl")).toThrow(/no usable events/);
+  });
+
+  describe("allowEmptySlate", () => {
+    it("accepts an empty slate when the caller asked about a specific date", () => {
+      // A dated probe asks about one day, and days with no games are ordinary:
+      // college football's `dates=20261018` (the Sunday after a Saturday slate)
+      // and a midweek `eng.1` date both return `events: []` today. Throwing on
+      // those makes walking a date window to find a past game impossible.
+      expect(
+        normalizeScoreboard({ events: [] }, "college-football", { allowEmptySlate: true }),
+      ).toEqual([]);
+    });
+
+    it("still rejects a payload with no events array at all", () => {
+      // The opt-out concerns an empty day, not trusting any payload: an error
+      // body carries no `events` key and must never read as "no games".
+      expect(() =>
+        normalizeScoreboard({ code: 400, message: "Failed" }, "nfl", { allowEmptySlate: true }),
+      ).toThrow(/no events array/);
+    });
+
+    it("still rejects a slate whose events are all unusable", () => {
+      // ESPN listed a game and it lacked an id. That is a shape change, not an
+      // empty day — so tolerating empty days must not tolerate this, or an id
+      // rename would silently turn every slate into "no games".
+      expect(() =>
+        normalizeScoreboard({ events: [{ name: "nameless" }] }, "nfl", { allowEmptySlate: true }),
+      ).toThrow(/listed 1 event\(s\) but none were usable/);
+    });
+
+    it("defaults to off, so the current slate keeps its guard", () => {
+      expect(() => normalizeScoreboard({ events: [] }, "nfl", {})).toThrow(/no usable events/);
+    });
+  });
+});
+
+describe("espnSlateDate", () => {
+  it("files a late kickoff under the Eastern date, not the UTC one", () => {
+    // Measured: `college-football?dates=20261017` returns 52 games, 9 of which
+    // carry UTC dates on the 18th. Utah at Colorado kicks off 02:15Z — Saturday
+    // 10:15pm ET. Slicing the ISO string would ask for `dates=20261018`, which
+    // returns zero events, so every late game would be unreachable.
+    expect(espnSlateDate("2026-10-18T02:15:00Z")).toBe("20261017");
+  });
+
+  it("files the NFL's Sunday-night game under the Sunday", () => {
+    // Same trap on the NFL slate: Lions at Panthers at 00:20Z on the 5th is the
+    // 4th's 8:20pm ET game, and `nfl?dates=20261004` is where ESPN carries it.
+    expect(espnSlateDate("2026-10-05T00:20:00Z")).toBe("20261004");
+  });
+
+  it("formats an afternoon kickoff as its own date", () => {
+    expect(espnSlateDate("2026-10-17T16:00:00Z")).toBe("20261017");
+  });
+
+  it("pads single-digit months and days", () => {
+    expect(espnSlateDate("2026-01-04T18:00:00Z")).toBe("20260104");
+  });
+
+  it("returns undefined for an instant it cannot read", () => {
+    // A slip's printed time is OCR'd text; a garbled one must not become a
+    // `dates=NaNaNNaN` request.
+    expect(espnSlateDate("not a date")).toBeUndefined();
+    expect(espnSlateDate("")).toBeUndefined();
   });
 });
 

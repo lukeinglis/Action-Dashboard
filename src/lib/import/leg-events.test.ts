@@ -130,7 +130,24 @@ describe("resolveLegEventId", () => {
       deps({ teams: [], loadSchedule }),
     );
 
-    expect(loadSchedule).toHaveBeenCalledWith("college-football");
+    // No slate instant: the slip printed no kickoff, so the current slate is
+    // what gets asked for.
+    expect(loadSchedule).toHaveBeenCalledWith("college-football", undefined);
+  });
+
+  it("asks for the slate of the kickoff the slip printed, not today's", async () => {
+    // A slip reviewed days after it was placed names a game the current
+    // scoreboard no longer carries, so a printed kickoff has to scope the
+    // request.
+    const loadSchedule = vi.fn(async () => [scheduled]);
+    await resolveLegEventId(
+      createFakeSupabase({ events: [] }) as unknown as SupabaseClient,
+      USER,
+      leg({ matchup: { awayTeamName: "LV", homeTeamName: "NE", startTimeUtc: "2026-10-12T17:00:00Z" } }),
+      deps({ loadSchedule }),
+    );
+
+    expect(loadSchedule).toHaveBeenCalledWith("nfl", "2026-10-12T17:00:00Z");
   });
 
   it("files a created team under the canonical league, not the slip's spelling", async () => {
@@ -215,5 +232,54 @@ describe("cachedScheduleLoader", () => {
     });
 
     await expect(load("nfl")).resolves.toEqual([]);
+  });
+
+  it("asks the provider for the slate the instant belongs to", async () => {
+    const fetchSchedule = vi.fn(async () => [scheduled]);
+    const load = cachedScheduleLoader(fetchSchedule, () => "20261017");
+
+    await load("college-football", "2026-10-18T02:15:00Z");
+
+    expect(fetchSchedule).toHaveBeenCalledWith("college-football", "20261017");
+  });
+
+  it("shares one request between two kickoffs on the same slate", async () => {
+    // The point of keying on the slate rather than the instant: a parlay across
+    // the day's noon and night games is one scoreboard, so it must be one
+    // request. Keying on the instant would fetch the same slate twice.
+    const fetchSchedule = vi.fn(async () => [scheduled]);
+    const load = cachedScheduleLoader(fetchSchedule, (instant) =>
+      instant.slice(0, 10).replace(/-/g, ""),
+    );
+
+    await Promise.all([
+      load("college-football", "2026-10-17T16:00:00Z"),
+      load("college-football", "2026-10-17T23:30:00Z"),
+    ]);
+
+    expect(fetchSchedule).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps two different slates apart", async () => {
+    const fetchSchedule = vi.fn(async () => [scheduled]);
+    const load = cachedScheduleLoader(fetchSchedule, (instant) =>
+      instant.slice(0, 10).replace(/-/g, ""),
+    );
+
+    await Promise.all([
+      load("college-football", "2026-10-17T16:00:00Z"),
+      load("college-football", "2026-10-24T16:00:00Z"),
+    ]);
+
+    expect(fetchSchedule).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks for the current slate when no instant is given", async () => {
+    const fetchSchedule = vi.fn(async () => [scheduled]);
+    const load = cachedScheduleLoader(fetchSchedule, () => "20261017");
+
+    await load("nfl");
+
+    expect(fetchSchedule).toHaveBeenCalledWith("nfl", undefined);
   });
 });

@@ -15,8 +15,16 @@ import type { ApprovedLeg } from "./pipeline";
 
 export interface LegEventDeps {
   teams: TeamCandidate[];
-  /** The provider's schedule for a provider sport key. */
-  loadSchedule: (providerSport: string) => Promise<ProviderEvent[]>;
+  /**
+   * The provider's schedule for a provider sport key, optionally for the slate
+   * containing a given instant rather than today's.
+   *
+   * The instant is passed rather than a formatted date because which calendar
+   * day a kickoff belongs to is the provider's convention, not ours — ESPN files
+   * a Saturday-night game under the Saturday even though it is Sunday in UTC.
+   * `cachedScheduleLoader` takes that conversion as a dependency.
+   */
+  loadSchedule: (providerSport: string, slateAtUtc?: string) => Promise<ProviderEvent[]>;
   providerKey: string;
 }
 
@@ -48,7 +56,13 @@ export async function resolveLegEventId(
   if (!sport) return undefined;
 
   const providerSport = toProviderSport(sport, leg.league);
-  const schedule = providerSport ? await deps.loadSchedule(providerSport) : [];
+  // When the slip printed a kickoff, ask for that game's slate rather than
+  // today's — a slip reviewed days after it was placed names a game the current
+  // scoreboard no longer carries. Most screenshots print no time, in which case
+  // this is undefined and the current slate is still what gets asked for.
+  const schedule = providerSport
+    ? await deps.loadSchedule(providerSport, leg.matchup.startTimeUtc)
+    : [];
 
   // A team the user doesn't have yet is the common case for any sport outside
   // the NFL seed data — every college football and soccer leg imported so far
@@ -92,21 +106,30 @@ export async function resolveLegEventId(
 }
 
 /**
- * Wraps a provider schedule fetch so each sport is requested at most once per
- * approval, and a provider outage yields an empty schedule instead of an
- * error (§22: a failed refresh must not take the rest of the app down). An
+ * Wraps a provider schedule fetch so each sport *and slate* is requested at most
+ * once per approval, and a provider outage yields an empty schedule instead of
+ * an error (§22: a failed refresh must not take the rest of the app down). An
  * empty schedule just means no kickoff can be learned, so the leg stays
  * unlinked — the same outcome as before, and still fixable by hand.
+ *
+ * `toSlateDate` converts an instant into the provider's own slate identifier,
+ * and the cache is keyed on its *output* rather than on the instant. That is
+ * what makes a parlay across several games on one day cost one request: two
+ * kickoffs three hours apart are different instants but the same slate, and
+ * keying on the instant would fetch it twice.
  */
 export function cachedScheduleLoader(
-  fetchSchedule: (providerSport: string) => Promise<ProviderEvent[]>,
-): (providerSport: string) => Promise<ProviderEvent[]> {
+  fetchSchedule: (providerSport: string, slateDate?: string) => Promise<ProviderEvent[]>,
+  toSlateDate?: (instantUtc: string) => string | undefined,
+): (providerSport: string, slateAtUtc?: string) => Promise<ProviderEvent[]> {
   const cache = new Map<string, Promise<ProviderEvent[]>>();
-  return (providerSport) => {
-    let pending = cache.get(providerSport);
+  return (providerSport, slateAtUtc) => {
+    const slateDate = slateAtUtc && toSlateDate ? toSlateDate(slateAtUtc) : undefined;
+    const key = `${providerSport}|${slateDate ?? ""}`;
+    let pending = cache.get(key);
     if (!pending) {
-      pending = fetchSchedule(providerSport).catch(() => []);
-      cache.set(providerSport, pending);
+      pending = fetchSchedule(providerSport, slateDate).catch(() => []);
+      cache.set(key, pending);
     }
     return pending;
   };
