@@ -300,4 +300,41 @@ describe("findTeam", () => {
     expect(findTeam("LA", "football", nfl)).toBeUndefined();
     expect(findTeam("New York", "football", nfl)).toBeUndefined();
   });
+
+  describe("when extraction could not determine the sport", () => {
+    // ESPN lists 264 schools whose college-football and college-basketball
+    // display names are byte-identical, and 266 sharing an abbreviation — so
+    // "Auburn Tigers" is two Team rows as soon as both sports are tracked, and
+    // a name-only match has to pick between them.
+    const footballAuburn = { id: "team-aub-fb", sport: "football", name: "Auburn Tigers", abbreviation: "AUB" };
+    const basketballAuburn = { id: "team-aub-bb", sport: "basketball", name: "Auburn Tigers", abbreviation: "AUB" };
+
+    it("still matches by name alone while the name belongs to one sport", () => {
+      expect(findTeam("Auburn Tigers", "", [footballAuburn, ...nfl])?.id).toBe("team-aub-fb");
+      expect(findTeam("AUB", "", [footballAuburn, ...nfl])?.id).toBe("team-aub-fb");
+    });
+
+    it("refuses to pick between two sports' teams of the same name", () => {
+      // Picking the first would be picking by row order, and the sport decided
+      // here is the sport the Event is filed under and the schedule the leg is
+      // graded against — so the wrong one grades off a different game entirely.
+      expect(findTeam("Auburn Tigers", "", [footballAuburn, basketballAuburn])).toBeUndefined();
+      expect(findTeam("AUB", "", [footballAuburn, basketballAuburn])).toBeUndefined();
+    });
+
+    it("is decisive again as soon as the leg names its sport", () => {
+      const both = [footballAuburn, basketballAuburn];
+      expect(findTeam("Auburn Tigers", "football", both)?.id).toBe("team-aub-fb");
+      expect(findTeam("Auburn Tigers", "basketball", both)?.id).toBe("team-aub-bb");
+    });
+
+    it("does not fall through to a looser rung after an ambiguous one", () => {
+      // The exact-name rung matched; it was just ambiguous. Answering from the
+      // "ABBR Mascot" rung instead would be a worse guess, not a better one.
+      const hybridTrap = { id: "team-trap", sport: "golf", name: "Auburn Tigers", abbreviation: "Auburn" };
+      expect(
+        findTeam("Auburn Tigers", "", [footballAuburn, basketballAuburn, hybridTrap]),
+      ).toBeUndefined();
+    });
+  });
 });

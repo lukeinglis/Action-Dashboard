@@ -176,7 +176,14 @@ async function refreshOneSport(
   context: OneSportContext,
 ): Promise<SportRefreshResult> {
   const { userId, provider, now } = context;
-  const key = { userId, providerKey: provider.key, sport: scope.sport };
+  // Keyed by the *provider* sport, not the internal one. `sports_refresh_state`
+  // is unique on (user_id, provider_key, sport) and it is a per-request lock,
+  // cooldown and quota counter — and one internal sport can now span several
+  // provider keys. Keying it by "football" put NFL and college football on the
+  // same row: whichever ran first took the lock and set last_success_at, and the
+  // other was skipped on cooldown every single refresh. §22.1's counters are
+  // per-request too, so they only add up per provider key.
+  const key = { userId, providerKey: provider.key, sport: scope.providerSport };
 
   if (!provider.supportsSport(scope.providerSport)) {
     return emptyResult(scope, { status: "skipped", skipReason: "unsupported" });

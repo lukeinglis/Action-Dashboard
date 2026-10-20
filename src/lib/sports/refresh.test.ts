@@ -196,7 +196,10 @@ function stateRow(overrides: Record<string, unknown> = {}) {
     id: "state-1",
     user_id: USER,
     provider_key: "espn",
-    sport: "football",
+    // The provider key, not the internal sport: the row is the per-request
+    // lock, cooldown and §22.1 counter, and one internal sport can span
+    // several provider keys (see refreshOneSport).
+    sport: "nfl",
     in_progress_since: null,
     last_attempt_at: null,
     last_success_at: null,
@@ -279,6 +282,28 @@ describe("refreshSportsData", () => {
     expect(getScores).not.toHaveBeenCalled();
     // The lock must not be left behind by a skip.
     expect(fake.tables.sports_refresh_state[0].in_progress_since).toBeNull();
+  });
+
+  it("gives two leagues of one sport their own cooldown", async () => {
+    // `sports_refresh_state` is unique on (user_id, provider_key, sport) and is
+    // the per-request lock, cooldown and §22.1 counter. Keyed by the internal
+    // sport, NFL and college football shared one "football" row: whichever ran
+    // first took the lock and set last_success_at, so the other was skipped on
+    // cooldown on every single refresh and never updated again.
+    const getScores = vi.fn(async () => [providerEvent()]);
+    const fake = setup();
+    const result = await run(
+      fake,
+      fakeProvider({ getScores, supported: ["nfl", "college-football"] }),
+      [nflScope, { sport: "football", providerSport: "college-football", localDates: ["2026-10-04"] }],
+    );
+
+    expect(result.results.map((r) => r.status)).toEqual(["refreshed", "refreshed"]);
+    expect(getScores).toHaveBeenCalledTimes(2);
+    expect(fake.tables.sports_refresh_state.map((s) => s.sport).sort()).toEqual([
+      "college-football",
+      "nfl",
+    ]);
   });
 
   it("releases the lock it took, so the next refresh is not blocked", async () => {
