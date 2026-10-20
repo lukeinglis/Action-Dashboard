@@ -34,16 +34,22 @@ const BASE_URL = "https://site.api.espn.com/apis/site/v2/sports";
 /**
  * Sport key -> ESPN path segment.
  *
- * College football and the Premier League are here because `supportsSport`
- * reads straight off this table: an absent key made refresh skip the sport
- * outright, so every NCAAF and EPL leg was structurally ungradeable rather than
- * merely unmatched. Both endpoints sit on the same free, unauthenticated host as
- * the NFL one, so neither costs anything beyond the per-sport requests §22.1
- * already counts.
+ * College football, college basketball and the Premier League are here because
+ * `supportsSport` reads straight off this table: an absent key made refresh skip
+ * the sport outright, so every NCAAF and EPL leg was structurally ungradeable
+ * rather than merely unmatched. All of these endpoints sit on the same free,
+ * unauthenticated host as the NFL one, so none costs anything beyond the
+ * per-sport requests §22.1 already counts.
+ *
+ * Note the men's college basketball segment is `mens-college-basketball`, not
+ * the `college-basketball` that the football key's shape suggests — the latter
+ * is a 400 from ESPN, and a wrong segment here reads as "the provider is down"
+ * rather than as a typo.
  */
 const SPORT_PATHS: Record<string, string> = {
   nfl: "football/nfl",
   "college-football": "football/college-football",
+  "mens-college-basketball": "basketball/mens-college-basketball",
   golf: "golf/pga",
   "eng.1": "soccer/eng.1",
 };
@@ -52,6 +58,7 @@ const SPORT_PATHS: Record<string, string> = {
 const SPORT_LEAGUES: Record<string, string> = {
   nfl: "NFL",
   "college-football": "NCAAF",
+  "mens-college-basketball": "NCAAB",
   golf: "PGA",
   "eng.1": "Premier League",
 };

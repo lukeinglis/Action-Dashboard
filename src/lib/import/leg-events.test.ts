@@ -176,6 +176,52 @@ describe("resolveLegEventId", () => {
     expect(fake.tables.teams.map((t) => t.league)).toEqual(["NCAAF", "NCAAF"]);
   });
 
+  it("resolves a college basketball slip end to end, teams and all", async () => {
+    // Basketball was absent from the sport vocabulary entirely, so every NCAAB
+    // leg took the same route NCAAF used to: no provider key, no schedule, no
+    // teams, no Event — structurally ungradeable rather than merely unmatched.
+    const fake = createFakeSupabase({ events: [] });
+    const loadSchedule = vi.fn(async () => [
+      {
+        providerEventId: "espn-403",
+        sport: "mens-college-basketball",
+        name: "Duke Blue Devils at North Carolina Tar Heels",
+        startTimeUtc: "2027-02-06T01:00:00Z",
+        awayTeamName: "Duke Blue Devils",
+        awayTeamAbbreviation: "DUKE",
+        homeTeamName: "North Carolina Tar Heels",
+        homeTeamAbbreviation: "UNC",
+      },
+    ]);
+
+    const eventId = await resolveLegEventId(
+      fake as unknown as SupabaseClient,
+      USER,
+      leg({
+        sport: "basketball",
+        // As a book prints it, not as the table spells it.
+        league: "CBB",
+        matchup: {
+          awayTeamName: "Duke",
+          homeTeamName: "North Carolina",
+          startTimeUtc: "2027-02-06T01:00:00Z",
+        },
+      }),
+      deps({ teams: [], loadSchedule }),
+    );
+
+    expect(loadSchedule).toHaveBeenCalledWith("mens-college-basketball", "2027-02-06T01:00:00Z");
+    expect(eventId).toBeDefined();
+    expect(fake.tables.teams.map((t) => t.league)).toEqual(["NCAAB", "NCAAB"]);
+    expect(fake.tables.teams.map((t) => t.sport)).toEqual(["basketball", "basketball"]);
+    expect(fake.tables.events[0]).toMatchObject({
+      sport: "basketball",
+      name: "Duke Blue Devils @ North Carolina Tar Heels",
+      start_time_utc: "2027-02-06T01:00:00Z",
+      source: "provider",
+    });
+  });
+
   it("does nothing for a leg with no matchup, such as a season future", async () => {
     const fake = createFakeSupabase({ events: [] });
     const loadSchedule = vi.fn(async () => [scheduled]);
