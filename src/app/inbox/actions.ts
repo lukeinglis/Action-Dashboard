@@ -272,9 +272,10 @@ export async function approveParsedImport(
         oddsAmerican: leg.oddsAmerican,
       });
 
-      // A leg whose game the user never entered by hand matched no Event, and
-      // BetLeg does not persist the team names — so without creating the Event
-      // here the matchup is gone for good and the leg can never be graded.
+      // A leg whose game the user never entered by hand matched no Event.
+      // `repairLegs` can re-read the matchup from `raw_description` later, but
+      // §20.2 bars it from creating the game — so unless the Event is created
+      // here, the leg stays unlinked and never grades.
       let eventId = leg.eventId;
       if (!eventId && legEventDeps) {
         try {

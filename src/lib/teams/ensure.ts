@@ -6,8 +6,16 @@
 // `window.prompt` on /events/new — so a slip naming any team outside that seed
 // (Auburn, Ohio State, Chelsea) resolved neither side, `resolveLegEventId`
 // returned undefined, and the leg was saved pointing at no game at all.
-// BetLeg does not persist the team names, so at that point the matchup is gone
-// for good: nothing downstream can grade a leg whose game it cannot name.
+//
+// The matchup itself survives that: `bet_legs.raw_description` keeps the slip's
+// verbatim block, `Event:` line included, and `repairLegs` parses it back. What
+// cannot be recovered later is the *link*, because §20.2 permits Event creation
+// only from an explicit user action — manual entry, import approval, pin search
+// or participant lookup — and refresh "never creates new ones". So `repairLegs`
+// can only ever rediscover games the user already has; a leg naming one nobody
+// entered stays unlinked however often it runs, never grades, and the Ticket
+// holding it never settles. Import approval is the sanctioned place to create
+// that game, which is why this runs here.
 //
 // The safety rule, and the reason this is not simply "insert what the slip
 // said": a Team is only ever created from a provider game that matched

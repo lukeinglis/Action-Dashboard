@@ -92,8 +92,12 @@ export interface ApprovedLeg {
   eventId?: string;
   /**
    * The teams the slip named, carried through so approval can create the Event
-   * when `eventId` is absent (see `ensureEvent`). BetLeg does not persist team
-   * names, so this is the last point at which the matchup still exists.
+   * when `eventId` is absent (see `ensureEvent`).
+   *
+   * Structured here rather than re-parsed later because approval is the last
+   * stage *permitted* to create that Event (§20.2) — not because the names are
+   * about to be lost. `bet_legs.raw_description` keeps the slip's verbatim text,
+   * which is what `repairLegs` reads to re-derive a matchup after the fact.
    */
   matchup?: ApprovedMatchup;
   subjects: ApprovedSubject[];
