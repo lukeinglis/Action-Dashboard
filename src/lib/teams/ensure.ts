@@ -244,12 +244,14 @@ function soleSideIndex(printed: string, sides: ProviderSide[]): number | undefin
  * Bournemouth") — so the printed words are allowed to be a leading or trailing
  * run of the provider's words.
  *
- * Contiguous, and anchored to one end, on purpose. A plain word-subset rule
- * would let a bare "State" match both "Florida State Seminoles" and "Ohio State
- * Buckeyes", and a plain substring rule would match "Miami FL" to "Miami
- * Hurricanes" — which is exactly the guess that puts a leg on the wrong game,
- * given "Miami" is also Miami (OH). Those stay unmatched, and the leg stays
- * unlinked.
+ * Contiguous, anchored to one end, and whole words, on purpose. A plain
+ * word-subset rule would let a bare "State" match both "Florida State
+ * Seminoles" and "Ohio State Buckeyes"; a prefix rule is worse still, because
+ * the "FL" in "Miami FL" prefixes "Florida" and Florida State's schedule
+ * contains both Miami and the Florida Gators. Neither loosening is tried.
+ *
+ * On top of the run there is one narrow allowance for a state-qualified program
+ * name — see `withoutStateQualifier`.
  */
 function sideMatches(printed: string, side: ProviderSide): boolean {
   const wanted = normalizeEventName(printed);
@@ -259,8 +261,72 @@ function sideMatches(printed: string, side: ProviderSide): boolean {
 
   const words = normalizeEventName(side.name).split(" ").filter(Boolean);
   const wantedWords = wanted.split(" ").filter(Boolean);
-  if (wantedWords.length === 0 || wantedWords.length > words.length) return false;
 
-  const isRun = (offset: number) => wantedWords.every((word, i) => words[offset + i] === word);
-  return isRun(0) || isRun(words.length - wantedWords.length);
+  const isRun = (needle: string[], offset: number) =>
+    needle.every((word, index) => words[offset + index] === word);
+  const matchesRun = (needle: string[]) =>
+    needle.length > 0 &&
+    needle.length <= words.length &&
+    (isRun(needle, 0) || isRun(needle, words.length - needle.length));
+
+  if (matchesRun(wantedWords)) return true;
+
+  const unqualified = withoutStateQualifier(wantedWords, words);
+  return unqualified !== undefined && matchesRun(unqualified);
+}
+
+/**
+ * Every USPS state code, plus DC — the vocabulary both sides use to tell
+ * same-named programs apart.
+ *
+ * Measured against ESPN's own rosters (762 college football teams, 362 men's
+ * basketball), every one of the 46 qualified names has the identical shape
+ * `<program> (<ST>) <mascot>`: "Miami (OH) RedHawks", "Wayne State (MI)
+ * Warriors", "California (PA) Vulcans". Books print the same code, without the
+ * parentheses, as a trailing word: "Miami FL".
+ *
+ * All 51 codes rather than the 23 ESPN actually uses, because the case that
+ * matters is one it *doesn't*: ESPN qualifies only the minority program, so
+ * Miami (FL) is plain "Miami Hurricanes" and FL never appears as an ESPN
+ * qualifier at all — yet "Miami FL" is exactly what the slip prints.
+ */
+const STATE_CODES = new Set([
+  "al", "ak", "az", "ar", "ca", "co", "ct", "dc", "de", "fl", "ga", "hi", "ia",
+  "id", "il", "in", "ks", "ky", "la", "ma", "md", "me", "mi", "mn", "mo", "ms",
+  "mt", "nc", "nd", "ne", "nh", "nj", "nm", "nv", "ny", "oh", "ok", "or", "pa",
+  "ri", "sc", "sd", "tn", "tx", "ut", "va", "vt", "wa", "wi", "wv", "wy",
+]);
+
+/**
+ * The printed words with a trailing state qualifier removed, or undefined when
+ * there isn't one to remove or removing it would be a guess.
+ *
+ * This is what links "Miami FL" to "Miami Hurricanes". Without it that leg —
+ * the one remaining orphan in the author's own data after the slate probe — can
+ * never link, because the two names share no run in either direction: the slip
+ * ends with the state and the provider ends with the mascot.
+ *
+ * The qualifier is dropped only when the provider's name does not carry a
+ * *different* one. That is the whole safety property, and it is precisely the
+ * Miami case: "Miami FL" against "Miami (OH) RedHawks" is refused on the
+ * conflict between FL and OH, not on the name, so widening the run cannot put
+ * the leg on the wrong Miami.
+ *
+ * The converse — "Miami OH" against the unqualified "Miami Hurricanes" — is
+ * still allowed, since ESPN gives no state to contradict it. That looseness is
+ * real but contained: `assignSides` requires both printed names to land on
+ * different sides of the *same* scheduled game, and Miami (OH) and Miami (FL)
+ * do not share an opponent on a given day. It is also the safer direction to
+ * err in, since a leg that refuses to link is fixable by hand.
+ */
+function withoutStateQualifier(wantedWords: string[], providerWords: string[]): string[] | undefined {
+  const printedState = wantedWords[wantedWords.length - 1];
+  if (wantedWords.length < 2 || !STATE_CODES.has(printedState)) return undefined;
+
+  // Index 0 is the program itself and never the qualifier — "La Salle
+  // Explorers" opens with Louisiana's code without being qualified by it.
+  const providerState = providerWords.slice(1).find((word) => STATE_CODES.has(word));
+  if (providerState && providerState !== printedState) return undefined;
+
+  return wantedWords.slice(0, -1);
 }

@@ -298,15 +298,66 @@ describe("ensureMatchupTeams", () => {
       ).toBeUndefined();
     });
 
-    it("refuses a printed name that merely overlaps the provider's", async () => {
-      // "Miami FL" is not a run of "Miami Hurricanes" — and "Miami" is also
-      // Miami (OH), so a guess here is a coin flip on which program the user
-      // actually bet. Unlinked is the honest outcome.
+    it("accepts a program the slip qualified by state", async () => {
+      // "Miami FL" shares no run with "Miami Hurricanes" in either direction —
+      // the slip ends with the state, the provider with the mascot — so the
+      // state has to come off for this to link at all.
       expect(
         await resolve("Miami FL", "Clemson", [
           game({ awayTeamName: "Miami Hurricanes", homeTeamName: "Clemson Tigers" }),
         ]),
+      ).toEqual(["Miami Hurricanes", "Clemson Tigers"]);
+    });
+
+    it("accepts a state the provider spells parenthetically", async () => {
+      // No loosening needed for this one: ESPN's parentheses normalise away, so
+      // "Miami OH" is already a leading run of "miami oh redhawks". Pinned so
+      // the slip's unparenthesised spelling stays covered.
+      expect(
+        await resolve("Miami OH", "Clemson", [
+          game({ awayTeamName: "Miami (OH) RedHawks", homeTeamName: "Clemson Tigers" }),
+        ]),
+      ).toEqual(["Miami (OH) RedHawks", "Clemson Tigers"]);
+    });
+
+    it("refuses a program whose state contradicts the provider's", async () => {
+      // The safety property of dropping the state: the two Miamis are told
+      // apart by FL against OH, so the looser run cannot pick the wrong one.
+      expect(
+        await resolve("Miami FL", "Clemson", [
+          game({ awayTeamName: "Miami (OH) RedHawks", homeTeamName: "Clemson Tigers" }),
+        ]),
       ).toBeUndefined();
+    });
+
+    it("refuses a state that prefixes another program on the slate", async () => {
+      // Why the state is dropped as a whole word and never matched as a
+      // prefix: "fl" prefixes "florida", and Florida State's own schedule
+      // carries both Miami and the Florida Gators.
+      expect(
+        await resolve("Miami FL", "Florida State", [
+          game({ awayTeamName: "Florida Gators", homeTeamName: "Florida State Seminoles" }),
+        ]),
+      ).toBeUndefined();
+    });
+
+    it("refuses a trailing word that is not a state", async () => {
+      expect(
+        await resolve("Miami Dolphins", "Clemson", [
+          game({ awayTeamName: "Miami Hurricanes", homeTeamName: "Clemson Tigers" }),
+        ]),
+      ).toBeUndefined();
+    });
+
+    it("does not read a leading state code as the provider's qualifier", async () => {
+      // "La Salle" opens with Louisiana's code without being qualified by it,
+      // so a slip naming the school's actual state must not be refused on a
+      // conflict between LA and PA.
+      expect(
+        await resolve("La Salle PA", "Clemson", [
+          game({ awayTeamName: "La Salle Explorers", homeTeamName: "Clemson Tigers" }),
+        ]),
+      ).toEqual(["La Salle Explorers", "Clemson Tigers"]);
     });
 
     it("refuses a pair that both land on the same side", async () => {
