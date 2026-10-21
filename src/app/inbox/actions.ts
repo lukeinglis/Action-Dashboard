@@ -30,7 +30,13 @@ import {
   type ApprovedFantasyMatchupGroup,
 } from "@/lib/import/pipeline";
 import { fetchDuplicateCandidates, fetchMatchCandidates, fetchPlayerSlotCandidates } from "@/lib/import/candidates";
-import { cachedScheduleLoader, resolveLegEventId, type LegEventDeps } from "@/lib/import/leg-events";
+import {
+  cachedScheduleLoader,
+  resolveLegEventId,
+  slateProbeInstants,
+  withSlateProbe,
+  type LegEventDeps,
+} from "@/lib/import/leg-events";
 import { EspnProvider, espnSlateDate } from "@/lib/providers/espn";
 import { createDfsLineup } from "@/lib/dfs/lineups";
 import { createDfsLineupSlot } from "@/lib/dfs/lineup-slots";
@@ -40,6 +46,18 @@ import { createFantasyMatchup } from "@/lib/fantasy/matchups";
 import { createFantasyRosterSlot } from "@/lib/fantasy/roster-slots";
 
 const BUCKET = "screenshots";
+
+/**
+ * How many days before a ticket's placed date to search for its games.
+ *
+ * Three covers both patterns seen in the author's own orphaned legs — a slip
+ * captured an hour before kickoff (same day) and a Sunday-morning import of
+ * Saturday's college slate (one day back) — with margin for a slip sat on over
+ * a weekend. Each extra day is one more provider request per sport, and buys
+ * less the further back it reaches, since a leg matches only when exactly one
+ * game in the whole window fits.
+ */
+const SLATE_PROBE_DAYS_BACK = 3;
 
 async function requireUserId(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -235,16 +253,25 @@ export async function approveParsedImport(
   const supabase = await createClient();
   const userId = await requireUserId(supabase);
 
+  // Falls back to the import moment for a slip that printed no placed date,
+  // which is the common case. Taken once so every such group probes the same
+  // slates and shares the cached requests.
+  const importedAt = new Date().toISOString();
+
   // Only pay for the team list when some leg actually needs an Event created.
   const needsEvents = groups.some((g) => g.legs.some((l) => !l.eventId && l.matchup));
   const legEventDeps: LegEventDeps | null = needsEvents
     ? {
         teams: (await fetchMatchCandidates(supabase, userId)).teams,
+        // Shared across every group, so two tickets placed on the same day cost
+        // one set of requests. Each group then narrows this to its own slates.
         loadSchedule: cachedScheduleLoader(
           (sport, date) =>
             // `allowEmptySlate` only for a dated request: a past date may
             // genuinely have had no games, whereas an empty *current* slate is
-            // the provider regression the adapter guards against.
+            // the provider regression the adapter guards against. Every probed
+            // request is dated, and most of the days one tries are expected to
+            // be empty — a Sunday in college football, a midweek in the EPL.
             EspnProvider.getSchedule({ sport, date, allowEmptySlate: date !== undefined }),
           espnSlateDate,
         ),
@@ -254,6 +281,19 @@ export async function approveParsedImport(
 
   for (const group of groups) {
     if (group.legs.length === 0) continue;
+
+    // Scoped to this ticket's own date. A leg whose slip printed no kickoff can
+    // only be found by searching the slates around when its ticket was placed —
+    // the current scoreboard dropped its game days ago. Per group rather than
+    // per import so a ticket from last week doesn't make every other ticket's
+    // legs search last week too.
+    const groupDeps = legEventDeps && {
+      ...legEventDeps,
+      loadSchedule: withSlateProbe(
+        legEventDeps.loadSchedule,
+        slateProbeInstants(group.placedAt ?? importedAt, SLATE_PROBE_DAYS_BACK),
+      ),
+    };
 
     const ticket = await createTicket(supabase, userId, {
       sportsbook: DEFAULT_SPORTSBOOK,
@@ -284,9 +324,9 @@ export async function approveParsedImport(
       // §20.2 bars it from creating the game — so unless the Event is created
       // here, the leg stays unlinked and never grades.
       let eventId = leg.eventId;
-      if (!eventId && legEventDeps) {
+      if (!eventId && groupDeps) {
         try {
-          eventId = await resolveLegEventId(supabase, userId, leg, legEventDeps);
+          eventId = await resolveLegEventId(supabase, userId, leg, groupDeps);
         } catch {
           // The Ticket is already saved; failing now would leave a half-written
           // approval. An unlinked leg is the pre-existing behaviour and the
