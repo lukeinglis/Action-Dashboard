@@ -38,10 +38,6 @@ export interface SportKey {
  * the ones a new sport silently breaks: a multi-league sport with no `primary`
  * turns every league-less Event of that sport manual-only, and two keys sharing
  * a league (or an alias) make `toProviderSport` depend on row order.
- *
- * College basketball is the next sport to land here, and it is the case these
- * invariants exist for: it joins the NBA under internal sport "basketball"
- * exactly as NCAAF joined the NFL under "football".
  */
 export const SPORT_KEYS: readonly SportKey[] = [
   { providerSport: "nfl", sport: "football", league: "NFL", primary: true },
@@ -50,6 +46,20 @@ export const SPORT_KEYS: readonly SportKey[] = [
     sport: "football",
     league: "NCAAF",
     leagueAliases: ["NCAA Football", "College Football", "CFB", "NCAAFB"],
+  },
+  {
+    providerSport: "mens-college-basketball",
+    sport: "basketball",
+    league: "NCAAB",
+    leagueAliases: ["NCAA Basketball", "College Basketball", "CBB", "NCAAM", "NCAAMB"],
+    // Deliberately not `primary`, even though it is currently the only
+    // basketball league here. A lone candidate short-circuits below without
+    // consulting `primary`, so marking it changes nothing today — but it would
+    // outlive the reason for it. Basketball's league-less default belongs to the
+    // NBA whenever that lands, and a stale `primary` here would quietly send
+    // every league-less basketball Event to the college schedule instead. Left
+    // unset, the invariant test fails the moment a second basketball league is
+    // added without one, which is the reminder we want.
   },
   { providerSport: "golf", sport: "golf", league: "PGA", primary: true },
   {

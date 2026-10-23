@@ -11,6 +11,7 @@ describe("toInternalSport", () => {
   it("translates the provider's league-namespaced key to the internal sport", () => {
     expect(toInternalSport("nfl")).toBe("football");
     expect(toInternalSport("college-football")).toBe("football");
+    expect(toInternalSport("mens-college-basketball")).toBe("basketball");
     expect(toInternalSport("eng.1")).toBe("soccer");
     expect(toInternalSport("golf")).toBe("golf");
   });
@@ -43,6 +44,9 @@ describe("toProviderSport", () => {
     for (const league of ["EPL", "England - Premier League", "English Premier League"]) {
       expect(toProviderSport("soccer", league)).toBe("eng.1");
     }
+    for (const league of ["NCAAB", "NCAA Basketball", "College Basketball", "CBB", "NCAAM", "NCAAMB"]) {
+      expect(toProviderSport("basketball", league)).toBe("mens-college-basketball");
+    }
   });
 
   it("is case- and space-insensitive about the league, as printed text is", () => {
@@ -61,6 +65,7 @@ describe("toProviderSport", () => {
 
   it("uses the sole candidate when a sport has only one league", () => {
     expect(toProviderSport("golf", null)).toBe("golf");
+    expect(toProviderSport("basketball", null)).toBe("mens-college-basketball");
   });
 
   it("returns null for a named league the table does not carry", () => {
@@ -70,6 +75,11 @@ describe("toProviderSport", () => {
     expect(toProviderSport("football", "XFL")).toBeNull();
     expect(toProviderSport("soccer", "La Liga")).toBeNull();
     expect(toProviderSport("golf", "LIV")).toBeNull();
+    // The NBA is the case that matters most here: basketball's only league is
+    // the college one, and answering with it would look up an NBA leg against
+    // the college schedule. Null makes refresh skip it and §22 report it as
+    // manual-only, which is the honest answer until the NBA is carried.
+    expect(toProviderSport("basketball", "NBA")).toBeNull();
   });
 
   it("returns null for a sport no adapter covers", () => {
@@ -81,10 +91,12 @@ describe("toProviderSport", () => {
 });
 
 // These hold for the table as it stands and must keep holding for whatever is
-// added to it. College basketball is the next entry — it joins the NBA under
+// added to it. The NBA is the next entry — it joins college basketball under
 // internal sport "basketball" exactly as NCAAF joined the NFL under "football"
 // — and each of these is a way that addition could break a sport already
-// working, silently and without touching its own code.
+// working, silently and without touching its own code. In particular, adding it
+// gives basketball a second league, so the league-less check below will fail
+// until the NBA is marked `primary`.
 describe("the SPORT_KEYS table itself", () => {
   const sports = [...new Set(SPORT_KEYS.map((k) => k.sport))];
 
@@ -157,8 +169,16 @@ describe("providerSportLabel", () => {
     // "Football" would collapse them into one ambiguous line.
     expect(providerSportLabel("nfl")).toBe("NFL");
     expect(providerSportLabel("college-football")).toBe("NCAAF");
+    expect(providerSportLabel("mens-college-basketball")).toBe("NCAAB");
     expect(providerSportLabel("eng.1")).toBe("Premier League");
     expect(providerSportLabel("golf")).toBe("PGA");
+  });
+
+  it("is the canonical league a created Team is stored under", () => {
+    // `resolveLegEventId` passes this, not the slip's spelling: a Team saved as
+    // "CBB" or "College Basketball" is one `toProviderSport` cannot translate
+    // back, so it would never match its own schedule again.
+    expect(providerSportLabel(toProviderSport("basketball", "CBB")!)).toBe("NCAAB");
   });
 
   it("falls back to the key itself for anything the table does not cover", () => {
