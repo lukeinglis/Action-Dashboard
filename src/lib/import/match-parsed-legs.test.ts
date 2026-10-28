@@ -264,6 +264,127 @@ describe("matchParsedLeg", () => {
       { name: "Buffalo Bills", teamId: "team-bills", participantId: undefined, matched: true, direction: "against" },
     ]);
   });
+
+  describe("given the matchup's teams", () => {
+    // The real shape of the author's own orphaned legs: a college slip prints
+    // the program, ESPN prints the full team, and the Teams exist under ESPN's
+    // spelling because `ensureMatchupTeams` created them that way.
+    const auburn = { id: "team-aub", sport: "football", name: "Auburn Tigers", abbreviation: "AUB" };
+    const georgia = { id: "team-uga", sport: "football", name: "Georgia Bulldogs", abbreviation: "UGA" };
+    const cfbEvent = {
+      id: "event-cfb",
+      sport: "football",
+      league: "NCAAF",
+      name: "Auburn Tigers @ Georgia Bulldogs",
+      startTimeUtc: "2026-10-11T19:30:00Z",
+      awayTeamId: "team-aub",
+      homeTeamId: "team-uga",
+    };
+    const cfb: MatchCandidates = { teams: [auburn, georgia], participants: [], events: [cfbEvent] };
+    const matchup = { awayTeam: auburn, homeTeam: georgia };
+
+    // Verbatim from leg 0d4f5703 in the author's data.
+    const spread = leg({
+      marketType: "spread",
+      selection: "Auburn +19.5",
+      awayTeamName: "Auburn",
+      homeTeamName: "Georgia Bulldogs",
+      league: "NCAAF",
+      line: 19.5,
+      overUnder: "over" as const,
+      startTimeUtc: undefined,
+    });
+
+    it("links the Event the printed names alone could not find", () => {
+      expect(matchParsedLeg(spread, cfb, TZ).eventId).toBeUndefined();
+      expect(matchParsedLeg(spread, cfb, TZ, matchup).eventId).toBe("event-cfb");
+    });
+
+    it("backs the team the slip actually named", () => {
+      // The baseline is the live defect, reproduced exactly — and it is not
+      // merely "unmatched". With no team on the selection, the opponent is
+      // picked by comparing printed strings: "Auburn" differs from "Auburn
+      // +19.5" as text, so the side the user *backed* is proposed as the
+      // opponent, "against". That is how leg 0d4f5703 came to hold a single
+      // subject rooting against Auburn, and how a Participant named "Auburn"
+      // came to exist at all.
+      expect(matchParsedLeg(spread, cfb, TZ).subjects).toEqual([
+        { name: "Auburn +19.5", teamId: undefined, participantId: undefined, matched: false, direction: "for" },
+        { name: "Auburn", teamId: undefined, participantId: undefined, matched: false, direction: "against" },
+      ]);
+
+      // With the pair, both sides resolve and the directions land the right way
+      // round. Note the primary also loses its line, because the team is only
+      // found once the line comes off.
+      expect(matchParsedLeg(spread, cfb, TZ, matchup).subjects).toEqual([
+        { name: "Auburn", teamId: "team-aub", participantId: undefined, matched: true, direction: "for" },
+        { name: "Georgia Bulldogs", teamId: "team-uga", participantId: undefined, matched: true, direction: "against" },
+      ]);
+    });
+
+    it("reads the team off a selection that carries its line", () => {
+      // "Auburn +19.5" has to lose the line before either rule can see a team.
+      const noSubjectLine = leg({
+        marketType: "spread",
+        selection: "Auburn +19.5",
+        awayTeamName: "Auburn",
+        homeTeamName: "Georgia Bulldogs",
+      });
+      expect(matchParsedLeg(noSubjectLine, cfb, TZ, matchup).subjects[0]).toMatchObject({
+        teamId: "team-aub",
+        direction: "for",
+      });
+    });
+
+    it("keeps a player prop's subject a player", () => {
+      // The gate on `allowsTeamSubject`. A word-run against two teams is a
+      // loose rule by design, and a surname is exactly where it would do harm:
+      // "Washington" would otherwise be stored as the team.
+      const prop = leg({
+        marketType: "rushing_yards",
+        selection: "Washington Over 100",
+        subject: "Washington",
+        awayTeamName: "Auburn",
+        homeTeamName: "Georgia Bulldogs",
+        overUnder: "over" as const,
+      });
+      const withWashington: MatchCandidates = {
+        ...cfb,
+        teams: [...cfb.teams, { id: "team-wsh", sport: "football", name: "Washington Huskies" }],
+      };
+      const match = matchParsedLeg(prop, withWashington, TZ, {
+        awayTeam: auburn,
+        homeTeam: { id: "team-wsh", sport: "football", name: "Washington Huskies" },
+      });
+
+      expect(match.subjects[0]).toMatchObject({ teamId: undefined, createParticipant: true });
+    });
+
+    it("still falls back to the roster for a name only findTeam can read", () => {
+      // "MIN Timberwolves" is the abbreviation-plus-mascot form, which is not a
+      // run of "Minnesota Timberwolves" — so the pair cannot resolve it and the
+      // existing rung has to stay reachable.
+      const wolves = { id: "team-min", sport: "basketball", name: "Minnesota Timberwolves", abbreviation: "MIN" };
+      const heat = { id: "team-mia", sport: "basketball", name: "Miami Heat", abbreviation: "MIA" };
+      const nba: MatchCandidates = { teams: [wolves, heat], participants: [], events: [] };
+
+      const match = matchParsedLeg(
+        leg({
+          marketType: "moneyline",
+          selection: "MIN Timberwolves",
+          awayTeamName: "MIN",
+          homeTeamName: "MIA",
+          sport: "basketball",
+          league: "NBA",
+        }),
+        nba,
+        TZ,
+        { awayTeam: wolves, homeTeam: heat },
+      );
+
+      expect(match.subjects[0]).toMatchObject({ teamId: "team-min", direction: "for" });
+    });
+  });
 });
 
 describe("findTeam", () => {
