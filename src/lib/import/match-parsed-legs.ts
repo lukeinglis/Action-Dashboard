@@ -6,7 +6,8 @@
 // the review screen rather than silently created.
 
 import { buildEventMatchKey, buildTeamPairKey, normalizeEventName } from "@/lib/events/match-key";
-import { defaultSubjectDirection, marketCategory } from "@/lib/betting/subjects";
+import { allowsTeamSubject, defaultSubjectDirection, marketCategory } from "@/lib/betting/subjects";
+import { soleMatchingSide } from "@/lib/teams/match-side";
 import type { RootingDirection } from "@/lib/types/domain";
 import type { ParsedLeg } from "./parse-slip-text";
 
@@ -171,27 +172,63 @@ function sameName(a: string | undefined, b: string | undefined): boolean {
  */
 function findSelectionTeam(
   name: string,
-  sport: string,
-  teams: TeamCandidate[],
+  resolve: (name: string) => TeamCandidate | undefined,
 ): { team?: TeamCandidate; name: string } {
-  const exact = findTeam(name, sport, teams);
+  const exact = resolve(name);
   if (exact) return { team: exact, name };
 
   const withoutLine = name.replace(/\s*[+-]?\d+(?:\.\d+)?\s*$/, "").trim();
   if (!withoutLine || withoutLine === name) return { name };
 
-  const team = findTeam(withoutLine, sport, teams);
+  const team = resolve(withoutLine);
   return team ? { team, name: withoutLine } : { name };
 }
 
-export function matchParsedLeg(leg: ParsedLeg, candidates: MatchCandidates, timeZone: string): LegMatch {
+/**
+ * A leg's two sides, already reconciled to Team rows by something that had more
+ * to go on than the printed text — `ensureMatchupTeams` pins the pair against a
+ * provider game, so the name on the slip has been checked against the
+ * provider's canonical spelling rather than against the user's whole roster.
+ */
+export interface MatchupSides {
+  awayTeam: TeamCandidate;
+  homeTeam: TeamCandidate;
+}
+
+/**
+ * `matchup` short-circuits the part of this that the printed text cannot do.
+ *
+ * Books print the program where the provider prints the full team, and
+ * `findTeam` is exact — so "Auburn" never finds the "Auburn Tigers" row, and a
+ * leg whose slip spells either side short resolves no Event and, worse, no
+ * *backed* subject: grading reads the backed team off the subject, so the leg
+ * is ungradeable while still looking saved. Supplying the pair replaces every
+ * one of those lookups with a row, and lets the subject names be told apart
+ * between just those two teams — a decision `soleMatchingSide` can make safely
+ * and `findTeam` cannot make at all.
+ */
+export function matchParsedLeg(
+  leg: ParsedLeg,
+  candidates: MatchCandidates,
+  timeZone: string,
+  matchup?: MatchupSides,
+): LegMatch {
   const category = marketCategory(leg.marketType);
   const eventExpected = Boolean(leg.awayTeamName && leg.homeTeamName);
 
+  // Only where the market can have a team subject at all: a player prop's
+  // subject is a person, and letting a surname match a team by word-run is how
+  // "Washington" would end up stored as the Commanders.
+  const sides =
+    matchup && allowsTeamSubject(leg.marketType) ? [matchup.awayTeam, matchup.homeTeam] : undefined;
+  const resolveTeam = (name: string): TeamCandidate | undefined =>
+    (sides ? soleMatchingSide(name, sides) : undefined) ??
+    findTeam(name, leg.sport, candidates.teams);
+
   let eventId: string | undefined;
   if (eventExpected) {
-    const awayTeam = findTeam(leg.awayTeamName!, leg.sport, candidates.teams);
-    const homeTeam = findTeam(leg.homeTeamName!, leg.sport, candidates.teams);
+    const awayTeam = matchup?.awayTeam ?? findTeam(leg.awayTeamName!, leg.sport, candidates.teams);
+    const homeTeam = matchup?.homeTeam ?? findTeam(leg.homeTeamName!, leg.sport, candidates.teams);
     if (awayTeam && homeTeam) {
       // leg.sport may be unknown (empty); the matched teams' own sport is
       // authoritative and required to build a key comparable to candidates'.
@@ -254,7 +291,7 @@ export function matchParsedLeg(leg: ParsedLeg, candidates: MatchCandidates, time
   const subjects: SubjectProposal[] = [];
   function propose(name: string | undefined, role: "primary" | "opponent", resolved?: TeamCandidate) {
     if (!name) return;
-    const team = resolved ?? findTeam(name, leg.sport, candidates.teams);
+    const team = resolved ?? resolveTeam(name);
     const participant = team ? undefined : findParticipant(name, leg.sport, candidates.participants);
     const unmatchedPlayer = !team && !participant && category === "player_over_under";
     subjects.push({
@@ -275,7 +312,7 @@ export function matchParsedLeg(leg: ParsedLeg, candidates: MatchCandidates, time
       propose(leg.homeTeamName, "primary");
       break;
     case "team_vs_opponent": {
-      const primary = findSelectionTeam(leg.subject ?? leg.selection, leg.sport, candidates.teams);
+      const primary = findSelectionTeam(leg.subject ?? leg.selection, resolveTeam);
       propose(primary.name, "primary", primary.team);
 
       // Pick the opposite side by team identity, not by comparing the printed
@@ -285,9 +322,7 @@ export function matchParsedLeg(leg: ParsedLeg, candidates: MatchCandidates, time
       // "against", leaving the ticket rooting against its own pick and never
       // recording the real opponent at all.
       const opponentName = primary.team
-        ? [leg.awayTeamName, leg.homeTeamName].find(
-            (n) => n && findTeam(n, leg.sport, candidates.teams)?.id !== primary.team!.id,
-          )
+        ? [leg.awayTeamName, leg.homeTeamName].find((n) => n && resolveTeam(n)?.id !== primary.team!.id)
         : [leg.awayTeamName, leg.homeTeamName].find((n) => n && !sameName(n, primary.name));
       propose(opponentName, "opponent");
       break;
